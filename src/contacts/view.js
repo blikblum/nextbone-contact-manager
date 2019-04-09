@@ -1,41 +1,48 @@
-import { View, CollectionView } from 'backbone.marionette';
-import {RouterLink} from 'marionette.routing';
+import { Component, html, customElement } from "component";
+import {routerLinks} from 'nextbone-routing'
+import {state} from 'nextbone'
 
-const itemHtml = `          
-        <a>
-          <h4 class="list-group-item-heading">{model:firstName} {model:lastName}</h4>
-          <p class="list-group-item-text">{model:email}</p>
-        </a>`;
+@customElement('contacts-view')
+@routerLinks
+class ContactsView extends Component {
+  static outlet = '.contact-outlet'
 
-const ContactItemView = View.extend({  
-  tagName: 'li',
-  className: 'list-group-item',
-  attributes: {
-    route: 'contactdetail',
-    'rv-param-contactid': 'model:id'
-  },
-  template: itemHtml
-});
+  @state
+  contacts
 
-const ContactListView = CollectionView.extend({
-  tagName: 'ul',
-  className: 'list-group',
-  childView: ContactItemView,
-  behaviors: [RouterLink]
-});
+  render() {
+    return html`
+      <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
+          <div class="navbar-header">
+              <a class="navbar-brand" href="#">
+                  Contacts
+              </a>
+          </div>
+      </nav>
 
-export default View.extend({
-  template: require('./template.html'),  
-  regions: {
-    contactlist: '.contact-list',
-    outlet: '.contact-outlet'
-  },
-  initialize(options) {
-    this.contacts = options.contacts
-  },
-  onRender() {
-    this.showChildView('contactlist', new ContactListView({collection: this.contacts}))
+      <div class="container">
+          <div class="row">
+              <div class="col-md-4">
+                  <div class="contact-list">
+                    <ul class="list-group" routerlinks>
+                    ${
+                      this.contacts.map(contact => html`
+                      <li class="list-group-item" route="contactdetail" param-contactid=${contact.get('id')}>
+                      <a>
+                        <h4 class="list-group-item-heading">${contact.get('fullName')}</h4>
+                        <p class="list-group-item-text">${contact.get('email')}</p>
+                      </a>
+                      </li>                        
+                      `)                      
+                    }
+                    </ul>
+                  </div>
+              </div>
+              <div class="col-md-8 contact-outlet"></div>
+          </div>
+      </div>
+    `
   }
-})
+};
 
-
+export default ContactsView

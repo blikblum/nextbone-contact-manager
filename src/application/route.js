@@ -1,16 +1,12 @@
-import {Route} from 'marionette.routing';
+import {Route} from "nextbone-routing";
 import {WebAPI} from '../web-api';
 
-export default Route.extend({
-  activate(){
-    this.api = this.api || new WebAPI();
-  },
-
-  channelName: 'api',
-
-  radioRequests: {
-    'getContactList': function () {
-      return this.api.getContactList()
-    }
+export default class extends Route {
+  static providedContexts = {
+    api: {property: 'api'}
   }
-})
+
+  activate() {
+    this.api = this.api || new WebAPI();
+  }  
+};

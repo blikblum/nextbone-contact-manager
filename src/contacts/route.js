@@ -1,27 +1,23 @@
-import {Route} from 'marionette.routing';
-import Radio from 'backbone.radio';
+import {Route} from "nextbone-routing";
 import {Contacts} from '../entities';
 import ContactsView from './view';
 
-export default Route.extend({
-  activate(){
-    let contactsPromise = Radio.channel('api').request('getContactList');
+export default class extends Route {  
+  static component = ContactsView;
+
+  static providedContexts = {
+    contacts: {property: 'contacts'}
+  }
+
+  activate() {
+    const contactsPromise = this.context.api.getContactList();
     return contactsPromise.then(contactsData => {
       this.contacts = new Contacts(contactsData)
     });
-  },
-
-  viewClass: ContactsView,
-
-  viewOptions() {
-    return {
-      contacts: this.contacts
-    }
-  },
-
-  contextRequests: {
-    contacts: function () {
-      return this.contacts
-    }
   }
-})
+
+  prepareEl(el) {
+    super.prepareEl(el)
+    el.contacts = this.contacts
+  }  
+};

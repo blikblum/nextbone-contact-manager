@@ -1,30 +1,23 @@
 import './setup';
-import { Router } from 'marionette.routing';
+import { Router } from "nextbone-routing";
 import ApplicationRoute from './application/route';
 import ContactsRoute from './contacts/route';
 import ContactDetailRoute from './contactdetail/route';
 import ContactNoSelectionView from './noselection/view';
-import { Application } from 'backbone.marionette';
-import Radio from 'backbone.radio';
 
-
-const app = new Application({
-  region: '#app'
-});
-
-const router = new Router({log: true, logError: true}, app.getRegion());
+const router = new Router({outlet: '#app', log: true, logError: true});
 
 router.map(function (route) {
-  route('application', {path: '/', routeClass: ApplicationRoute}, function () {
-    route('contacts', {routeClass: ContactsRoute, abstract: true}, function () {
-      route('contacts.default', {path: '', viewClass: ContactNoSelectionView,
-        viewOptions: {message: 'Please Select a Contact.'}})
-      route('contactdetail', {path: ':contactid', routeClass: ContactDetailRoute})
+  route('application', {path: '/', class: ApplicationRoute}, function () {
+    route('contacts', {class: ContactsRoute, abstract: true}, function () {
+      route('contacts.default', {path: '', component: ContactNoSelectionView,
+        properties: {message: 'Please Select a Contact.'}})
+      route('contactdetail', {path: ':contactid', class: ContactDetailRoute})
     })
   })
 });
 
-Radio.channel('router').on('before:transition', function (transition) {
+router.on('before:transition', function (transition) {
   if (transition.path === '/') {
     transition.redirectTo('contacts.default')
   }

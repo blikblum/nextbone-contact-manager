@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    // This must be specified if "paths" is set
+    "experimentalDecorators": true,
+    "baseUrl": ".",
+    // Relative to "baseUrl"
+    "paths": {
+      "*": [
+        "*",
+        "./src/common/*"
+      ]
+    }
+  }
+}

@@ -9,23 +9,12 @@ module.exports = {
     filename: "bundle.js"
   },
   devtool: "source-map",
-  resolve: {
-    alias: {
-      marionette: 'backbone.marionette'
-    }
-  },
   module: {
     rules: [{
       test: /\.js$/,
       include: [path.resolve('src')],
-      use: [{
-        loader: 'babel-loader',
-        options: {
-          presets: [['es2015', {modules: false}]]
-        }
-      }]
-    },
-    {test: /\.html$/, loader: 'html-loader'}
+      loader: 'babel-loader'
+    }    
     ]
   },
   plugins: [
@@ -38,5 +27,8 @@ module.exports = {
       { from: 'assets/*' },
       { from: 'src/styles.css' }
     ])
-  ]
+  ],
+  resolve: {
+    modules: [path.resolve(__dirname, './src/common'), 'node_modules']
+  }
 };

@@ -1,14 +1,20 @@
-import Backbone from 'backbone';
+import { Model, Collection } from "nextbone";
+import { computed } from 'nextbone/computed'
 
-export const Contact = Backbone.Model.extend({
-  defaults: {
+
+export 
+@computed({
+  fullName: ['firstName', 'lastName', ({firstName, lastName}) => `${firstName} ${lastName}`]
+})
+class Contact extends Model {
+  static defaults = {
     firstName: '',
     lastName: '',
     email: '',
     phoneNumber: ''
-  }
-});
+  };
+}
 
-export const Contacts = Backbone.Collection.extend({
-  model: Contact
-});
+export class Contacts extends Collection {
+  static model = Contact;
+}

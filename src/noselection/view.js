@@ -1,13 +1,14 @@
-import { View } from 'backbone.marionette';
+import { Component, html, customElement } from "component";
 
-const viewHtml = `
-  <div class="no-selection text-center">
-    <h2>{message}</h2>
-  </div>`;
-
-export default View.extend({  
-  template: viewHtml,
-  initialize(options) {
-    this.message = options.message
+@customElement('contact-noselection-view')
+class ContactNoSelectionView extends Component {
+  render() {
+    return html`
+    <div class="no-selection text-center">
+      <h2>${this.message}</h2>
+    </div>
+    `
   }
-});
+};
+
+export default ContactNoSelectionView
