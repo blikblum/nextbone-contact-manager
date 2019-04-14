@@ -1,5 +1,5 @@
 import {Route} from "nextbone-routing";
-import {Contacts} from '../entities';
+import {Contacts} from 'entities';
 import ContactsView from './view';
 
 export default class extends Route {  
@@ -10,10 +10,10 @@ export default class extends Route {
   }
 
   activate() {
-    const contactsPromise = this.context.api.getContactList();
-    return contactsPromise.then(contactsData => {
-      this.contacts = new Contacts(contactsData)
-    });
+    if (!this.contacts) {
+      this.contacts = new Contacts()
+      return this.contacts.fetch() 
+    }
   }
 
   prepareEl(el) {

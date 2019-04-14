@@ -23,6 +23,6 @@ export default class extends Route {
   onSaveModel(e) {
     const model = e.detail.model
     const attributes = _.clone(model.attributes);
-    this.contact.set(attributes, {reset:true});
+    this.contact.save(attributes);    
   }
 };

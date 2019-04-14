@@ -2955,10 +2955,10 @@ nextbone-routing@^0.5.1:
   dependencies:
     cherrytreex "^3.5.0"
 
-nextbone@^0.9.1:
-  version "0.9.1"
-  resolved "https://registry.yarnpkg.com/nextbone/-/nextbone-0.9.1.tgz#acd1e2940a73ec7b0fc7524853eea72ce164c4c6"
-  integrity sha512-JQXCOoFCIAu6dv2oFbTG2N5vBi0SevdkZoN0qRXCrD1JVjdQ7BHkK0eBBU+QtbbEAFOR98ZA0ffAIiuVxlKumA==
+nextbone@^0.10.0:
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/nextbone/-/nextbone-0.10.0.tgz#c6fe76c3f53e058ef2d46c6c8c8803dfee1377ee"
+  integrity sha512-MiPdi4CdJMUP7qiDK9o8RpS1q2NLu9Bp7QJ2/N07SKAi1Gm3O+LWQWeHbZpq+7nhJbr8zCHqJe/v5z+VKUhIGw==
   dependencies:
     underscore ">=1.8.3"
 
