@@ -24,7 +24,7 @@ module.exports = {
     }),
 
     new CopyWebpackPlugin([
-      { from: 'assets/*' },
+      { from: 'node_modules/bootstrap/dist/css/bootstrap.min.css' },
       { from: 'src/styles.css' }
     ])
   ],

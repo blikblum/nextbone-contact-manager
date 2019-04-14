@@ -1,9 +1,9 @@
 import {Route, elEvent} from "nextbone-routing";
 import _ from 'underscore';
-import ContactDetailView from './view';
+import ContactEditView from './view';
 
 export default class extends Route {
-  static component = ContactDetailView;
+  static component = ContactEditView;
 
   activate(transition) {
     let contacts = this.context.contacts;

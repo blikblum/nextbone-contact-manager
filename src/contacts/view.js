@@ -12,27 +12,28 @@ class ContactsView extends Component {
 
   render() {
     return html`
-      <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
-          <div class="navbar-header">
-              <a class="navbar-brand" href="#">
-                  Contacts
-              </a>
-          </div>
+      <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top" role="navigation">
+          <a class="navbar-brand" href="#">
+              Contacts
+          </a>          
       </nav>
 
       <div class="container">
+          <div class="row mb-2">
+            <div class="col-md-4">
+              <button class="btn btn-secondary btn-block">Add Contact</button>
+            </div>            
+          </div>
           <div class="row">
-              <div class="col-md-4">
+              <div class="col-md-4">              
                   <div class="contact-list">
                     <ul class="list-group" routerlinks>
                     ${
-                      this.contacts.map(contact => html`
-                      <li class="list-group-item" route="contactdetail" param-contactid=${contact.get('id')}>
-                      <a>
-                        <h4 class="list-group-item-heading">${contact.get('fullName')}</h4>
-                        <p class="list-group-item-text">${contact.get('email')}</p>
-                      </a>
-                      </li>                        
+                      this.contacts.map(contact => html`                      
+                      <a class="list-group-item list-group-item-action" route="contacts.edit" param-contactid=${contact.get('id')}>
+                        <h4>${contact.get('fullName')}</h4>
+                        <p class="mb-0">${contact.get('email')}</p>
+                      </a>                      
                       `)                      
                     }
                     </ul>

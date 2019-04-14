@@ -5688,7 +5688,7 @@ const createClass = (ctor, options = {}) => {
     return result;
   }, []);
 
-  class FormBindMixin extends ctor {
+  return class extends ctor {
     constructor() {
       super();
       events.forEach(({ event, selector }) =>
@@ -5734,8 +5734,7 @@ const createClass = (ctor, options = {}) => {
         model.set(prop, value, { validate: true, attributes });
       }
     }
-  }
-  return FormBindMixin;
+  };
 };
 
 const formBind = (optionsOrCtorOrDescriptor, options) => {
@@ -5758,6 +5757,351 @@ const formBind = (optionsOrCtorOrDescriptor, options) => {
   // optionsOrCtorOrDescriptor === options
   return ctorOrDescriptor => {
     return formBind(ctorOrDescriptor, optionsOrCtorOrDescriptor);
+  };
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/nextbone/localStorage.js":
+/*!***********************************************!*\
+  !*** ./node_modules/nextbone/localStorage.js ***!
+  \***********************************************/
+/*! exports provided: guid, bindLocalStorage, localStorage */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "guid", function() { return guid; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "bindLocalStorage", function() { return bindLocalStorage; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "localStorage", function() { return localStorage; });
+/* harmony import */ var _nextbone_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./nextbone.js */ "./node_modules/nextbone/nextbone.js");
+
+
+/** Generates 4 random hex digits
+ * @returns {string} 4 Random hex digits
+ */
+function s4() {
+  const rand = (1 + Math.random()) * 0x10000;
+  return (rand | 0).toString(16).substring(1);
+}
+
+/** Generate a pseudo-guid
+ * @returns {string} A GUID-like string.
+ */
+function guid() {
+  return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
+}
+
+/** The default serializer for transforming your saved data to localStorage */
+const defaultSerializer = {
+  /** Return a JSON-serialized string representation of item
+   * @param {Object} item - The encoded model data
+   * @returns {string} A JSON-encoded string
+   */
+  serialize(item) {
+    return typeof item === 'object' && item ? JSON.stringify(item) : item;
+  },
+
+  /** Custom deserialization for data.
+   * @param {string} data - JSON-encoded string
+   * @returns {Object} The object result of parsing data
+   */
+  deserialize(data) {
+    return JSON.parse(data);
+  }
+};
+
+const initializedData = {};
+
+function initializeData(instance, name, data) {
+  const records = [];
+  if (typeof data === 'function') data = data();
+  if (!Array.isArray(data)) data = [data];
+  const idAttribute =
+    instance instanceof _nextbone_js__WEBPACK_IMPORTED_MODULE_0__["Collection"]
+      ? (instance.model || instance.constructor.model || {})['idAttribute'] || 'id'
+      : instance.idAttribute;
+  data.forEach(item => {
+    let id = item[idAttribute];
+    if (!id && id !== 0) {
+      item[idAttribute] = id = guid();
+    }
+    window.localStorage.setItem(`${name}-${id}`, JSON.stringify(item));
+    records.push(id);
+  });
+  window.localStorage.setItem(name, records.join(','));
+}
+
+function bindLocalStorage(instance, name, { serializer, initialData } = {}) {
+  instance.localStorage = new LocalStorage(name, serializer);
+  if (initialData && !initializedData[name]) {
+    initializeData(instance, name, initialData);
+    initializedData[name] = true;
+  }
+}
+
+const revisionMap = {};
+
+/** LocalStorage proxy class for Backbone models.
+ * Usage:
+ *   export const MyModel = Backbone.Model.extend({
+ *     localStorage: new LocalStorage('MyModelName')
+ *   });
+ */
+class LocalStorage {
+  constructor(name = '', serializer = defaultSerializer) {
+    this.name = name;
+    this.serializer = serializer;
+  }
+
+  /** Return the global localStorage variable
+   * @returns {Object} Local Storage reference.
+   */
+  localStorage() {
+    return window.localStorage;
+  }
+
+  /** Returns the records associated with store
+   * @returns {Array} The records.
+   */
+  getRecords() {
+    if (!this.records || revisionMap[this.name] !== this.revision) {
+      const store = this._getItem(this.name);
+      this.revision = revisionMap[this.name];
+      return (store && store.split(',')) || [];
+    }
+    return this.records;
+  }
+
+  /** Save the current status to localStorage
+   * @returns {undefined}
+   */
+  save(records) {
+    this._setItem(this.name, records.join(','));
+    this.records = records;
+    let revision = revisionMap[this.name];
+    this.revision = revisionMap[this.name] = ++revision;
+  }
+
+  /** Add a new model with a unique GUID, if it doesn't already have its own ID
+   * @param {Model} model - The Backbone Model to save to LocalStorage
+   * @returns {Model} The saved model
+   */
+  create(model) {
+    if (!model.id && model.id !== 0) {
+      model.id = guid();
+      model.set(model.idAttribute, model.id);
+    }
+
+    this._setItem(this._itemName(model.id), this.serializer.serialize(model));
+    const records = this.getRecords();
+    records.push(model.id.toString());
+    this.save(records);
+
+    return this.find(model);
+  }
+
+  /** Update an existing model in LocalStorage
+   * @param {Model} model - The model to update
+   * @returns {Model} The updated model
+   */
+  update(model) {
+    this._setItem(this._itemName(model.id), this.serializer.serialize(model));
+
+    const modelId = model.id.toString();
+    const records = this.getRecords();
+
+    if (!records.includes(modelId)) {
+      records.push(modelId);
+      this.save(records);
+    }
+    return this.find(model);
+  }
+
+  /** Retrieve a model from local storage by model id
+   * @param {Model} model - The Backbone Model to lookup
+   * @returns {Model} The model from LocalStorage
+   */
+  find(model) {
+    return this.serializer.deserialize(this._getItem(this._itemName(model.id)));
+  }
+
+  /** Return all models from LocalStorage
+   * @returns {Array} The array of models stored
+   */
+  findAll() {
+    const records = this.getRecords();
+    return records
+      .map(id => this.serializer.deserialize(this._getItem(this._itemName(id))))
+      .filter(item => item != null);
+  }
+
+  /** Delete a model from `this.data`, returning it.
+   * @param {Model} model - Model to delete
+   * @returns {Model} Model removed from this.data
+   */
+  destroy(model) {
+    this._removeItem(this._itemName(model.id));
+    const newRecords = this.getRecords().filter(id => id != model.id);
+
+    this.save(newRecords);
+
+    return model;
+  }
+
+  /** Number of items in localStorage
+   * @returns {integer} - Number of items
+   */
+  _storageSize() {
+    return window.localStorage.length;
+  }
+
+  /** Return the item from localStorage
+   * @param {string} name - Name to lookup
+   * @returns {string} Value from localStorage
+   */
+  _getItem(name) {
+    return window.localStorage.getItem(name);
+  }
+
+  /** Return the item name to lookup in localStorage
+   * @param {integer} id - Item ID
+   * @returns {string} Item name
+   */
+  _itemName(id) {
+    return `${this.name}-${id}`;
+  }
+
+  /** Proxy to the localStorage setItem value method
+   * @param {string} key - LocalStorage key to set
+   * @param {string} value - LocalStorage value to set
+   * @returns {undefined}
+   */
+  _setItem(key, value) {
+    window.localStorage.setItem(key, value);
+  }
+
+  /** Proxy to the localStorage removeItem method
+   * @param {string} key - LocalStorage key to remove
+   * @returns {undefined}
+   */
+  _removeItem(key) {
+    window.localStorage.removeItem(key);
+  }
+}
+
+/** Returns the localStorage attribute for a model
+ * @param {Model} model - Model to get localStorage
+ * @returns {Storage} The localstorage
+ */
+function getLocalStorage(model) {
+  return model.localStorage || (model.collection && model.collection.localStorage);
+}
+
+/** Override Backbone's `sync` method to run against localStorage
+ * @param {string} method - One of read/create/update/delete
+ * @param {Model} model - Backbone model to sync
+ * @param {Object} options - Options object, use `ajaxSync: true` to run the
+ *  operation against the server in which case, options will also be passed into
+ *  `jQuery.ajax`
+ * @returns {undefined}
+ */
+function localStorageSync(method, model, options) {
+  const store = getLocalStorage(model);
+  let resp, errorMessage;
+  let resolve, reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  try {
+    switch (method) {
+      case 'read':
+        resp = typeof model.id === 'undefined' ? store.findAll() : store.find(model);
+        break;
+      case 'create':
+        resp = store.create(model);
+        break;
+      case 'patch':
+      case 'update':
+        resp = store.update(model);
+        break;
+      case 'delete':
+        resp = store.destroy(model);
+        break;
+    }
+  } catch (error) {
+    if (error.code === 22 && store._storageSize() === 0) {
+      errorMessage = 'Private browsing is unsupported';
+    } else {
+      errorMessage = error.message;
+    }
+  }
+
+  if (resp) {
+    if (options.success) {
+      options.success.call(model, resp, options);
+    }
+    resolve(resp);
+  } else {
+    errorMessage = errorMessage ? errorMessage : 'Record Not Found';
+
+    if (options.error) {
+      options.error.call(model, errorMessage, options);
+    }
+    reject(errorMessage);
+  }
+
+  // add compatibility with $.ajax
+  // always execute callback for success and error
+  if (options.complete) {
+    options.complete.call(model, resp);
+  }
+
+  return promise;
+}
+
+const previousSync = _nextbone_js__WEBPACK_IMPORTED_MODULE_0__["sync"].handler;
+
+/** Get the local or ajax sync call
+ * @param {Model} model - Model to sync
+ * @param {object} options - Options to pass, takes ajaxSync
+ * @returns {function} The sync method that will be called
+ */
+function getSyncMethod(model, options) {
+  const forceAjaxSync = options.ajaxSync;
+  const hasLocalStorage = getLocalStorage(model);
+
+  return !forceAjaxSync && hasLocalStorage ? localStorageSync : previousSync;
+}
+
+_nextbone_js__WEBPACK_IMPORTED_MODULE_0__["sync"].handler = function localStorageSyncHandler(method, model, options = {}) {
+  const fn = getSyncMethod(model, options);
+  return fn.call(this, method, model, options);
+};
+
+const createClass = (ModelClass, name, options) => {
+  return class extends ModelClass {
+    constructor(...args) {
+      super(...args);
+      bindLocalStorage(this, name, options);
+    }
+  };
+};
+
+const localStorage = (name, options) => ctorOrDescriptor => {
+  if (typeof ctorOrDescriptor === 'function') {
+    return createClass(ctorOrDescriptor, name, options);
+  }
+  const { kind, elements } = ctorOrDescriptor;
+  return {
+    kind,
+    elements,
+    finisher(ctor) {
+      return createClass(ctor, name, options);
+    }
   };
 };
 
@@ -7374,20 +7718,12 @@ const bindViewState = (el, value) => {
   }
 };
 
-const isSpecDecoratorCall = args => {
-  const descriptorKind = args[0].kind;
-  return (
-    args.length === 1 &&
-    (descriptorKind === 'field' || descriptorKind === 'method' || descriptorKind === 'class')
-  );
-};
-
 const registerDelegatedEvent = (ctor, eventName, selector, listener) => {
   const classEvents = ctor.__events || (ctor.__events = []);
   classEvents.push({ eventName, selector, listener });
 };
 
-const registerStateProperty = (ctor, name, key) => {
+const registerStateProperty = (ctor, name, key, options = {}) => {
   const classStates = ctor.__states || (ctor.__states = new Set());
   classStates.add(name);
   const desc = {
@@ -7396,6 +7732,16 @@ const registerStateProperty = (ctor, name, key) => {
     },
     set(value) {
       const oldValue = this[key];
+      if (options.copy) {
+        if (oldValue instanceof Model) {
+          if (value instanceof Model) {
+            oldValue.set(value.attributes);
+          } else {
+            oldValue.set(Object(value || {}));
+          }
+        }
+        return;
+      }
       if (value === oldValue) return;
       if (this.isConnected) {
         bindViewState(this, value);
@@ -7418,7 +7764,7 @@ const registerStateProperty = (ctor, name, key) => {
 const ensureViewClass = ElementClass => {
   if (ElementClass[isClassDecorated]) return ElementClass;
   ElementClass[isClassDecorated] = true;
-  class ViewClass extends ElementClass {
+  const ViewClass = class extends ElementClass {
     constructor() {
       super();
       const events = this.constructor.__events;
@@ -7443,15 +7789,15 @@ const ensureViewClass = ElementClass => {
       this.stopListening();
       super.disconnectedCallback && super.disconnectedCallback();
     }
-  }
+  };
   Events.extend(ViewClass.prototype);
   return ViewClass;
 };
 
 // Method decorator to register a delegated event
-const event = (eventName, selector) => (...args) => {
-  if (isSpecDecoratorCall(args)) {
-    const { kind, key, placement, descriptor, initializer } = args[0];
+const event = (eventName, selector) => (protoOrDescriptor, methodName, propertyDescriptor) => {
+  if (typeof methodName !== 'string') {
+    const { kind, key, placement, descriptor, initializer } = protoOrDescriptor;
     return {
       kind,
       placement,
@@ -7464,17 +7810,29 @@ const event = (eventName, selector) => (...args) => {
       }
     };
   }
-  // args[0]: target, args[1]: name, args[2]: descriptor
-  registerDelegatedEvent(args[0].constructor, eventName, selector, args[2].value);
+  // legacy decorator spec
+  registerDelegatedEvent(
+    protoOrDescriptor.constructor,
+    eventName,
+    selector,
+    propertyDescriptor.value
+  );
 };
 
 // Method decorator to define an observable model/collection to a property
-const state = (...args) => {
-  const isSpec = isSpecDecoratorCall(args);
-  const name = isSpec ? args[0].key : args[1];
+const state = (optionsOrProtoOrDescriptor, fieldName, options) => {
+  const isLegacy = typeof fieldName === 'string';
+  if (!isLegacy && typeof optionsOrProtoOrDescriptor.kind !== 'string') {
+    // passed options
+    return function(protoOrDescriptor) {
+      return state(protoOrDescriptor, fieldName, optionsOrProtoOrDescriptor);
+    };
+  }
+
+  const name = isLegacy ? fieldName : optionsOrProtoOrDescriptor.key;
   const key = typeof name === 'symbol' ? Symbol() : `__${name}`;
-  if (isSpec) {
-    const { kind, placement, descriptor, initializer } = args[0];
+  if (!isLegacy) {
+    const { kind, placement, descriptor, initializer } = optionsOrProtoOrDescriptor;
     return {
       kind,
       placement,
@@ -7482,31 +7840,31 @@ const state = (...args) => {
       initializer,
       key,
       finisher(ctor) {
-        registerStateProperty(ctor, name, key);
+        registerStateProperty(ctor, name, key, options);
         return ensureViewClass(ctor);
       }
     };
   }
-  registerStateProperty(args[0].constructor, name, key);
+  registerStateProperty(optionsOrProtoOrDescriptor.constructor, name, key, options);
 };
 
 // Custom element decorator
-const view = (...args) => {
-  if (isSpecDecoratorCall(args)) {
-    const { kind, elements } = args[0];
+const view = classOrDescriptor => {
+  if (typeof classOrDescriptor === 'object') {
+    const { kind, elements } = classOrDescriptor;
     return {
       kind,
       elements,
       finisher: ensureViewClass
     };
   }
-  return ensureViewClass(args[0]);
+  return ensureViewClass(classOrDescriptor);
 };
 
 // ES class Events mixin / decorator
-const withEvents = (...args) => {
-  if (isSpecDecoratorCall(args)) {
-    const { kind, elements } = args[0];
+const withEvents = classOrDescriptor => {
+  if (typeof classOrDescriptor === 'object') {
+    const { kind, elements } = classOrDescriptor;
     return {
       kind,
       elements,
@@ -7515,7 +7873,7 @@ const withEvents = (...args) => {
       }
     };
   }
-  const WithEventsClass = class extends args[0] {};
+  const WithEventsClass = class extends classOrDescriptor {};
   Events.extend(WithEventsClass.prototype);
   return WithEventsClass;
 };
@@ -9966,26 +10324,12 @@ var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;//     Underscor
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "default", function() { return _class; });
 /* harmony import */ var nextbone_routing__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! nextbone-routing */ "./node_modules/nextbone-routing/dist/nextbone-routing.js");
-/* harmony import */ var _web_api__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../web-api */ "./src/web-api.js");
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
+/* harmony default export */ __webpack_exports__["default"] = (class extends nextbone_routing__WEBPACK_IMPORTED_MODULE_0__["Route"] {
+  activate() {}
 
-
-class _class extends nextbone_routing__WEBPACK_IMPORTED_MODULE_0__["Route"] {
-  activate() {
-    this.api = this.api || new _web_api__WEBPACK_IMPORTED_MODULE_1__["WebAPI"]();
-  }
-
-}
-
-_defineProperty(_class, "providedContexts", {
-  api: {
-    property: 'api'
-  }
 });
-
 ;
 
 /***/ }),
@@ -10024,9 +10368,171 @@ class Component extends lit_element__WEBPACK_IMPORTED_MODULE_0__["LitElement"] {
 
 /***/ }),
 
-/***/ "./src/contactdetail/route.js":
+/***/ "./src/common/entities.js":
+/*!********************************!*\
+  !*** ./src/common/entities.js ***!
+  \********************************/
+/*! exports provided: Contact, Contacts */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Contact", function() { return Contact; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Contacts", function() { return Contacts; });
+/* harmony import */ var nextbone__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! nextbone */ "./node_modules/nextbone/nextbone.js");
+/* harmony import */ var nextbone_computed__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! nextbone/computed */ "./node_modules/nextbone/computed.js");
+/* harmony import */ var nextbone_localStorage__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! nextbone/localStorage */ "./node_modules/nextbone/localStorage.js");
+/* harmony import */ var _sample_data__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./sample-data */ "./src/common/sample-data.js");
+function _decorate(decorators, factory, superClass, mixins) { var api = _getDecoratorsApi(); if (mixins) { for (var i = 0; i < mixins.length; i++) { api = mixins[i](api); } } var r = factory(function initialize(O) { api.initializeInstanceElements(O, decorated.elements); }, superClass); var decorated = api.decorateClass(_coalesceClassElements(r.d.map(_createElementDescriptor)), decorators); api.initializeClassElements(r.F, decorated.elements); return api.runClassFinishers(r.F, decorated.finishers); }
+
+function _getDecoratorsApi() { _getDecoratorsApi = function () { return api; }; var api = { elementsDefinitionOrder: [["method"], ["field"]], initializeInstanceElements: function (O, elements) { ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { if (element.kind === kind && element.placement === "own") { this.defineClassElement(O, element); } }, this); }, this); }, initializeClassElements: function (F, elements) { var proto = F.prototype; ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { var placement = element.placement; if (element.kind === kind && (placement === "static" || placement === "prototype")) { var receiver = placement === "static" ? F : proto; this.defineClassElement(receiver, element); } }, this); }, this); }, defineClassElement: function (receiver, element) { var descriptor = element.descriptor; if (element.kind === "field") { var initializer = element.initializer; descriptor = { enumerable: descriptor.enumerable, writable: descriptor.writable, configurable: descriptor.configurable, value: initializer === void 0 ? void 0 : initializer.call(receiver) }; } Object.defineProperty(receiver, element.key, descriptor); }, decorateClass: function (elements, decorators) { var newElements = []; var finishers = []; var placements = { static: [], prototype: [], own: [] }; elements.forEach(function (element) { this.addElementPlacement(element, placements); }, this); elements.forEach(function (element) { if (!_hasDecorators(element)) return newElements.push(element); var elementFinishersExtras = this.decorateElement(element, placements); newElements.push(elementFinishersExtras.element); newElements.push.apply(newElements, elementFinishersExtras.extras); finishers.push.apply(finishers, elementFinishersExtras.finishers); }, this); if (!decorators) { return { elements: newElements, finishers: finishers }; } var result = this.decorateConstructor(newElements, decorators); finishers.push.apply(finishers, result.finishers); result.finishers = finishers; return result; }, addElementPlacement: function (element, placements, silent) { var keys = placements[element.placement]; if (!silent && keys.indexOf(element.key) !== -1) { throw new TypeError("Duplicated element (" + element.key + ")"); } keys.push(element.key); }, decorateElement: function (element, placements) { var extras = []; var finishers = []; for (var decorators = element.decorators, i = decorators.length - 1; i >= 0; i--) { var keys = placements[element.placement]; keys.splice(keys.indexOf(element.key), 1); var elementObject = this.fromElementDescriptor(element); var elementFinisherExtras = this.toElementFinisherExtras((0, decorators[i])(elementObject) || elementObject); element = elementFinisherExtras.element; this.addElementPlacement(element, placements); if (elementFinisherExtras.finisher) { finishers.push(elementFinisherExtras.finisher); } var newExtras = elementFinisherExtras.extras; if (newExtras) { for (var j = 0; j < newExtras.length; j++) { this.addElementPlacement(newExtras[j], placements); } extras.push.apply(extras, newExtras); } } return { element: element, finishers: finishers, extras: extras }; }, decorateConstructor: function (elements, decorators) { var finishers = []; for (var i = decorators.length - 1; i >= 0; i--) { var obj = this.fromClassDescriptor(elements); var elementsAndFinisher = this.toClassDescriptor((0, decorators[i])(obj) || obj); if (elementsAndFinisher.finisher !== undefined) { finishers.push(elementsAndFinisher.finisher); } if (elementsAndFinisher.elements !== undefined) { elements = elementsAndFinisher.elements; for (var j = 0; j < elements.length - 1; j++) { for (var k = j + 1; k < elements.length; k++) { if (elements[j].key === elements[k].key && elements[j].placement === elements[k].placement) { throw new TypeError("Duplicated element (" + elements[j].key + ")"); } } } } } return { elements: elements, finishers: finishers }; }, fromElementDescriptor: function (element) { var obj = { kind: element.kind, key: element.key, placement: element.placement, descriptor: element.descriptor }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); if (element.kind === "field") obj.initializer = element.initializer; return obj; }, toElementDescriptors: function (elementObjects) { if (elementObjects === undefined) return; return _toArray(elementObjects).map(function (elementObject) { var element = this.toElementDescriptor(elementObject); this.disallowProperty(elementObject, "finisher", "An element descriptor"); this.disallowProperty(elementObject, "extras", "An element descriptor"); return element; }, this); }, toElementDescriptor: function (elementObject) { var kind = String(elementObject.kind); if (kind !== "method" && kind !== "field") { throw new TypeError('An element descriptor\'s .kind property must be either "method" or' + ' "field", but a decorator created an element descriptor with' + ' .kind "' + kind + '"'); } var key = _toPropertyKey(elementObject.key); var placement = String(elementObject.placement); if (placement !== "static" && placement !== "prototype" && placement !== "own") { throw new TypeError('An element descriptor\'s .placement property must be one of "static",' + ' "prototype" or "own", but a decorator created an element descriptor' + ' with .placement "' + placement + '"'); } var descriptor = elementObject.descriptor; this.disallowProperty(elementObject, "elements", "An element descriptor"); var element = { kind: kind, key: key, placement: placement, descriptor: Object.assign({}, descriptor) }; if (kind !== "field") { this.disallowProperty(elementObject, "initializer", "A method descriptor"); } else { this.disallowProperty(descriptor, "get", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "set", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "value", "The property descriptor of a field descriptor"); element.initializer = elementObject.initializer; } return element; }, toElementFinisherExtras: function (elementObject) { var element = this.toElementDescriptor(elementObject); var finisher = _optionalCallableProperty(elementObject, "finisher"); var extras = this.toElementDescriptors(elementObject.extras); return { element: element, finisher: finisher, extras: extras }; }, fromClassDescriptor: function (elements) { var obj = { kind: "class", elements: elements.map(this.fromElementDescriptor, this) }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); return obj; }, toClassDescriptor: function (obj) { var kind = String(obj.kind); if (kind !== "class") { throw new TypeError('A class descriptor\'s .kind property must be "class", but a decorator' + ' created a class descriptor with .kind "' + kind + '"'); } this.disallowProperty(obj, "key", "A class descriptor"); this.disallowProperty(obj, "placement", "A class descriptor"); this.disallowProperty(obj, "descriptor", "A class descriptor"); this.disallowProperty(obj, "initializer", "A class descriptor"); this.disallowProperty(obj, "extras", "A class descriptor"); var finisher = _optionalCallableProperty(obj, "finisher"); var elements = this.toElementDescriptors(obj.elements); return { elements: elements, finisher: finisher }; }, runClassFinishers: function (constructor, finishers) { for (var i = 0; i < finishers.length; i++) { var newConstructor = (0, finishers[i])(constructor); if (newConstructor !== undefined) { if (typeof newConstructor !== "function") { throw new TypeError("Finishers must return a constructor."); } constructor = newConstructor; } } return constructor; }, disallowProperty: function (obj, name, objectType) { if (obj[name] !== undefined) { throw new TypeError(objectType + " can't have a ." + name + " property."); } } }; return api; }
+
+function _createElementDescriptor(def) { var key = _toPropertyKey(def.key); var descriptor; if (def.kind === "method") { descriptor = { value: def.value, writable: true, configurable: true, enumerable: false }; } else if (def.kind === "get") { descriptor = { get: def.value, configurable: true, enumerable: false }; } else if (def.kind === "set") { descriptor = { set: def.value, configurable: true, enumerable: false }; } else if (def.kind === "field") { descriptor = { configurable: true, writable: true, enumerable: true }; } var element = { kind: def.kind === "field" ? "field" : "method", key: key, placement: def.static ? "static" : def.kind === "field" ? "own" : "prototype", descriptor: descriptor }; if (def.decorators) element.decorators = def.decorators; if (def.kind === "field") element.initializer = def.value; return element; }
+
+function _coalesceGetterSetter(element, other) { if (element.descriptor.get !== undefined) { other.descriptor.get = element.descriptor.get; } else { other.descriptor.set = element.descriptor.set; } }
+
+function _coalesceClassElements(elements) { var newElements = []; var isSameElement = function (other) { return other.kind === "method" && other.key === element.key && other.placement === element.placement; }; for (var i = 0; i < elements.length; i++) { var element = elements[i]; var other; if (element.kind === "method" && (other = newElements.find(isSameElement))) { if (_isDataDescriptor(element.descriptor) || _isDataDescriptor(other.descriptor)) { if (_hasDecorators(element) || _hasDecorators(other)) { throw new ReferenceError("Duplicated methods (" + element.key + ") can't be decorated."); } other.descriptor = element.descriptor; } else { if (_hasDecorators(element)) { if (_hasDecorators(other)) { throw new ReferenceError("Decorators can't be placed on different accessors with for " + "the same property (" + element.key + ")."); } other.decorators = element.decorators; } _coalesceGetterSetter(element, other); } } else { newElements.push(element); } } return newElements; }
+
+function _hasDecorators(element) { return element.decorators && element.decorators.length; }
+
+function _isDataDescriptor(desc) { return desc !== undefined && !(desc.value === undefined && desc.writable === undefined); }
+
+function _optionalCallableProperty(obj, name) { var value = obj[name]; if (value !== undefined && typeof value !== "function") { throw new TypeError("Expected '" + name + "' to be a function"); } return value; }
+
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return typeof key === "symbol" ? key : String(key); }
+
+function _toPrimitive(input, hint) { if (typeof input !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (typeof res !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+
+function _toArray(arr) { return _arrayWithHoles(arr) || _iterableToArray(arr) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
+
+function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+
+
+
+
+let Contact = _decorate([Object(nextbone_computed__WEBPACK_IMPORTED_MODULE_1__["computed"])({
+  fullName: ['firstName', 'lastName', ({
+    firstName,
+    lastName
+  }) => `${firstName} ${lastName}`]
+})], function (_initialize, _Model) {
+  class Contact extends _Model {
+    constructor(...args) {
+      super(...args);
+
+      _initialize(this);
+    }
+
+  }
+
+  return {
+    F: Contact,
+    d: [{
+      kind: "field",
+      static: true,
+      key: "defaults",
+
+      value() {
+        return {
+          firstName: '',
+          lastName: '',
+          email: '',
+          phoneNumber: ''
+        };
+      }
+
+    }]
+  };
+}, nextbone__WEBPACK_IMPORTED_MODULE_0__["Model"]);
+let Contacts = _decorate([Object(nextbone_localStorage__WEBPACK_IMPORTED_MODULE_2__["localStorage"])('Contacts', {
+  initialData: _sample_data__WEBPACK_IMPORTED_MODULE_3__["getContacts"]
+})], function (_initialize2, _Collection) {
+  class Contacts extends _Collection {
+    constructor(...args) {
+      super(...args);
+
+      _initialize2(this);
+    }
+
+  }
+
+  return {
+    F: Contacts,
+    d: [{
+      kind: "field",
+      static: true,
+      key: "model",
+
+      value() {
+        return Contact;
+      }
+
+    }]
+  };
+}, nextbone__WEBPACK_IMPORTED_MODULE_0__["Collection"]);
+
+/***/ }),
+
+/***/ "./src/common/sample-data.js":
+/*!***********************************!*\
+  !*** ./src/common/sample-data.js ***!
+  \***********************************/
+/*! exports provided: getContacts */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "getContacts", function() { return getContacts; });
+let id = 1;
+
+function getId() {
+  return ++id;
+}
+
+function getContacts() {
+  return [{
+    id: getId(),
+    firstName: 'John',
+    lastName: 'Tolkien',
+    email: 'tolkien@inklings.com',
+    phoneNumber: '867-5309'
+  }, {
+    id: getId(),
+    firstName: 'Clive',
+    lastName: 'Lewis',
+    email: 'lewis@inklings.com',
+    phoneNumber: '867-5309'
+  }, {
+    id: getId(),
+    firstName: 'Owen',
+    lastName: 'Barfield',
+    email: 'barfield@inklings.com',
+    phoneNumber: '867-5309'
+  }, {
+    id: getId(),
+    firstName: 'Charles',
+    lastName: 'Williams',
+    email: 'williams@inklings.com',
+    phoneNumber: '867-5309'
+  }, {
+    id: getId(),
+    firstName: 'Roger',
+    lastName: 'Green',
+    email: 'green@inklings.com',
+    phoneNumber: '867-5309'
+  }];
+}
+
+/***/ }),
+
+/***/ "./src/contacts/edit/route.js":
 /*!************************************!*\
-  !*** ./src/contactdetail/route.js ***!
+  !*** ./src/contacts/edit/route.js ***!
   \************************************/
 /*! exports provided: default */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
@@ -10036,7 +10542,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var nextbone_routing__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! nextbone-routing */ "./node_modules/nextbone-routing/dist/nextbone-routing.js");
 /* harmony import */ var underscore__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! underscore */ "./node_modules/underscore/underscore.js");
 /* harmony import */ var underscore__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(underscore__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _view__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./view */ "./src/contactdetail/view.js");
+/* harmony import */ var _view__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./view */ "./src/contacts/edit/view.js");
 function _decorate(decorators, factory, superClass, mixins) { var api = _getDecoratorsApi(); if (mixins) { for (var i = 0; i < mixins.length; i++) { api = mixins[i](api); } } var r = factory(function initialize(O) { api.initializeInstanceElements(O, decorated.elements); }, superClass); var decorated = api.decorateClass(_coalesceClassElements(r.d.map(_createElementDescriptor)), decorators); api.initializeClassElements(r.F, decorated.elements); return api.runClassFinishers(r.F, decorated.finishers); }
 
 function _getDecoratorsApi() { _getDecoratorsApi = function () { return api; }; var api = { elementsDefinitionOrder: [["method"], ["field"]], initializeInstanceElements: function (O, elements) { ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { if (element.kind === kind && element.placement === "own") { this.defineClassElement(O, element); } }, this); }, this); }, initializeClassElements: function (F, elements) { var proto = F.prototype; ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { var placement = element.placement; if (element.kind === kind && (placement === "static" || placement === "prototype")) { var receiver = placement === "static" ? F : proto; this.defineClassElement(receiver, element); } }, this); }, this); }, defineClassElement: function (receiver, element) { var descriptor = element.descriptor; if (element.kind === "field") { var initializer = element.initializer; descriptor = { enumerable: descriptor.enumerable, writable: descriptor.writable, configurable: descriptor.configurable, value: initializer === void 0 ? void 0 : initializer.call(receiver) }; } Object.defineProperty(receiver, element.key, descriptor); }, decorateClass: function (elements, decorators) { var newElements = []; var finishers = []; var placements = { static: [], prototype: [], own: [] }; elements.forEach(function (element) { this.addElementPlacement(element, placements); }, this); elements.forEach(function (element) { if (!_hasDecorators(element)) return newElements.push(element); var elementFinishersExtras = this.decorateElement(element, placements); newElements.push(elementFinishersExtras.element); newElements.push.apply(newElements, elementFinishersExtras.extras); finishers.push.apply(finishers, elementFinishersExtras.finishers); }, this); if (!decorators) { return { elements: newElements, finishers: finishers }; } var result = this.decorateConstructor(newElements, decorators); finishers.push.apply(finishers, result.finishers); result.finishers = finishers; return result; }, addElementPlacement: function (element, placements, silent) { var keys = placements[element.placement]; if (!silent && keys.indexOf(element.key) !== -1) { throw new TypeError("Duplicated element (" + element.key + ")"); } keys.push(element.key); }, decorateElement: function (element, placements) { var extras = []; var finishers = []; for (var decorators = element.decorators, i = decorators.length - 1; i >= 0; i--) { var keys = placements[element.placement]; keys.splice(keys.indexOf(element.key), 1); var elementObject = this.fromElementDescriptor(element); var elementFinisherExtras = this.toElementFinisherExtras((0, decorators[i])(elementObject) || elementObject); element = elementFinisherExtras.element; this.addElementPlacement(element, placements); if (elementFinisherExtras.finisher) { finishers.push(elementFinisherExtras.finisher); } var newExtras = elementFinisherExtras.extras; if (newExtras) { for (var j = 0; j < newExtras.length; j++) { this.addElementPlacement(newExtras[j], placements); } extras.push.apply(extras, newExtras); } } return { element: element, finishers: finishers, extras: extras }; }, decorateConstructor: function (elements, decorators) { var finishers = []; for (var i = decorators.length - 1; i >= 0; i--) { var obj = this.fromClassDescriptor(elements); var elementsAndFinisher = this.toClassDescriptor((0, decorators[i])(obj) || obj); if (elementsAndFinisher.finisher !== undefined) { finishers.push(elementsAndFinisher.finisher); } if (elementsAndFinisher.elements !== undefined) { elements = elementsAndFinisher.elements; for (var j = 0; j < elements.length - 1; j++) { for (var k = j + 1; k < elements.length; k++) { if (elements[j].key === elements[k].key && elements[j].placement === elements[k].placement) { throw new TypeError("Duplicated element (" + elements[j].key + ")"); } } } } } return { elements: elements, finishers: finishers }; }, fromElementDescriptor: function (element) { var obj = { kind: element.kind, key: element.key, placement: element.placement, descriptor: element.descriptor }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); if (element.kind === "field") obj.initializer = element.initializer; return obj; }, toElementDescriptors: function (elementObjects) { if (elementObjects === undefined) return; return _toArray(elementObjects).map(function (elementObject) { var element = this.toElementDescriptor(elementObject); this.disallowProperty(elementObject, "finisher", "An element descriptor"); this.disallowProperty(elementObject, "extras", "An element descriptor"); return element; }, this); }, toElementDescriptor: function (elementObject) { var kind = String(elementObject.kind); if (kind !== "method" && kind !== "field") { throw new TypeError('An element descriptor\'s .kind property must be either "method" or' + ' "field", but a decorator created an element descriptor with' + ' .kind "' + kind + '"'); } var key = _toPropertyKey(elementObject.key); var placement = String(elementObject.placement); if (placement !== "static" && placement !== "prototype" && placement !== "own") { throw new TypeError('An element descriptor\'s .placement property must be one of "static",' + ' "prototype" or "own", but a decorator created an element descriptor' + ' with .placement "' + placement + '"'); } var descriptor = elementObject.descriptor; this.disallowProperty(elementObject, "elements", "An element descriptor"); var element = { kind: kind, key: key, placement: placement, descriptor: Object.assign({}, descriptor) }; if (kind !== "field") { this.disallowProperty(elementObject, "initializer", "A method descriptor"); } else { this.disallowProperty(descriptor, "get", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "set", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "value", "The property descriptor of a field descriptor"); element.initializer = elementObject.initializer; } return element; }, toElementFinisherExtras: function (elementObject) { var element = this.toElementDescriptor(elementObject); var finisher = _optionalCallableProperty(elementObject, "finisher"); var extras = this.toElementDescriptors(elementObject.extras); return { element: element, finisher: finisher, extras: extras }; }, fromClassDescriptor: function (elements) { var obj = { kind: "class", elements: elements.map(this.fromElementDescriptor, this) }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); return obj; }, toClassDescriptor: function (obj) { var kind = String(obj.kind); if (kind !== "class") { throw new TypeError('A class descriptor\'s .kind property must be "class", but a decorator' + ' created a class descriptor with .kind "' + kind + '"'); } this.disallowProperty(obj, "key", "A class descriptor"); this.disallowProperty(obj, "placement", "A class descriptor"); this.disallowProperty(obj, "descriptor", "A class descriptor"); this.disallowProperty(obj, "initializer", "A class descriptor"); this.disallowProperty(obj, "extras", "A class descriptor"); var finisher = _optionalCallableProperty(obj, "finisher"); var elements = this.toElementDescriptors(obj.elements); return { elements: elements, finisher: finisher }; }, runClassFinishers: function (constructor, finishers) { for (var i = 0; i < finishers.length; i++) { var newConstructor = (0, finishers[i])(constructor); if (newConstructor !== undefined) { if (typeof newConstructor !== "function") { throw new TypeError("Finishers must return a constructor."); } constructor = newConstructor; } } return constructor; }, disallowProperty: function (obj, name, objectType) { if (obj[name] !== undefined) { throw new TypeError(objectType + " can't have a ." + name + " property."); } } }; return api; }
@@ -10125,9 +10631,7 @@ function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.g
 
         const attributes = underscore__WEBPACK_IMPORTED_MODULE_1___default.a.clone(model.attributes);
 
-        this.contact.set(attributes, {
-          reset: true
-        });
+        this.contact.save(attributes);
       }
     }]
   };
@@ -10136,9 +10640,9 @@ function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.g
 
 /***/ }),
 
-/***/ "./src/contactdetail/view.js":
+/***/ "./src/contacts/edit/view.js":
 /*!***********************************!*\
-  !*** ./src/contactdetail/view.js ***!
+  !*** ./src/contacts/edit/view.js ***!
   \***********************************/
 /*! exports provided: default */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
@@ -10180,8 +10684,8 @@ function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
 
 
 
-let ContactDetailView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__["customElement"])('contact-edit-view'), nextbone_formbind__WEBPACK_IMPORTED_MODULE_2__["formBind"]], function (_initialize, _Component) {
-  class ContactDetailView extends _Component {
+let ContactEditView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__["customElement"])('contact-edit-view'), nextbone_formbind__WEBPACK_IMPORTED_MODULE_2__["formBind"]], function (_initialize, _Component) {
+  class ContactEditView extends _Component {
     constructor(...args) {
       super(...args);
 
@@ -10191,7 +10695,7 @@ let ContactDetailView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__
   }
 
   return {
-    F: ContactDetailView,
+    F: ContactEditView,
     d: [{
       kind: "field",
       decorators: [nextbone__WEBPACK_IMPORTED_MODULE_1__["state"]],
@@ -10208,45 +10712,38 @@ let ContactDetailView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__
           phoneNumber
         } = this.model.attributes;
         return component__WEBPACK_IMPORTED_MODULE_0__["html"]`
-        <div class="panel panel-primary">
-        <div class="panel-heading">
-            <h3 class="panel-title">Profile</h3>
-        </div>
-        <div class="panel-body">
-            <form role="form" class="form-horizontal">
-                <div class="form-group">
-                    <label class="col-sm-2 control-label">First Name</label>
-                    <div class="col-sm-10">
-                        <input name="firstName" type="text" placeholder="first name" class="form-control" .value=${firstName}>
-                    </div>
-                </div>
+        <div class="card">
+          <div class="card-header text-white bg-primary">
+              <h4 class="mb-0">Profile</h4>
+          </div>
+          <div class="card-body">
+              <form role="form">
+                  <div class="form-group">
+                      <label for="contact-first-name">First Name</label>
+                      <input id="contact-first-name" name="firstName" placeholder="first name" class="form-control" .value=${firstName}>                    
+                  </div>
 
-                <div class="form-group">
-                    <label class="col-sm-2 control-label">Last Name</label>
-                    <div class="col-sm-10">
-                        <input name="lastName" type="text" placeholder="last name" class="form-control" .value=${lastName}>
-                    </div>
-                </div>
+                  <div class="form-group">
+                      <label for="contact-last-name">Last Name</label>
+                      <input id="contact-last-name" name="lastName" placeholder="last name" class="form-control" .value=${lastName}>
+                  </div>
 
-                <div class="form-group">
-                    <label class="col-sm-2 control-label">Email</label>
-                    <div class="col-sm-10">
-                        <input name="email" type="text" placeholder="email" class="form-control" .value=${email}>
-                    </div>
-                </div>
+                  <div class="form-group">
+                      <label for="contact-email">Email</label>                  
+                      <input id="contact-email" name="email" placeholder="email" class="form-control" .value=${email}>
+                  </div>
 
-                <div class="form-group">
-                    <label class="col-sm-2 control-label">Phone Number</label>
-                    <div class="col-sm-10">
-                        <input name="phoneNumber" type="text" placeholder="phone number" class="form-control" .value=${phoneNumber}>
-                    </div>
-                </div>
-            </form>
-        </div>
+                  <div class="form-group">
+                    <label for="contact-phone-number">Phone Number</label>                    
+                    <input id="contact-phone-number" name="phoneNumber" placeholder="phone number" class="form-control" .value=${phoneNumber}>
+                  </div>
+              </form>
+          </div>
       </div>
 
+
       <div class="button-bar">
-        <button id="save-contact" class="btn btn-success">Save</button>
+        <button id="save-contact" class="btn btn-success pr-5 pl-5">Save</button>
       </div>
     `;
       }
@@ -10267,7 +10764,78 @@ let ContactDetailView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__
 }, component__WEBPACK_IMPORTED_MODULE_0__["Component"]);
 
 ;
-/* harmony default export */ __webpack_exports__["default"] = (ContactDetailView);
+/* harmony default export */ __webpack_exports__["default"] = (ContactEditView);
+
+/***/ }),
+
+/***/ "./src/contacts/noselection/view.js":
+/*!******************************************!*\
+  !*** ./src/contacts/noselection/view.js ***!
+  \******************************************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! component */ "./src/common/component.js");
+function _decorate(decorators, factory, superClass, mixins) { var api = _getDecoratorsApi(); if (mixins) { for (var i = 0; i < mixins.length; i++) { api = mixins[i](api); } } var r = factory(function initialize(O) { api.initializeInstanceElements(O, decorated.elements); }, superClass); var decorated = api.decorateClass(_coalesceClassElements(r.d.map(_createElementDescriptor)), decorators); api.initializeClassElements(r.F, decorated.elements); return api.runClassFinishers(r.F, decorated.finishers); }
+
+function _getDecoratorsApi() { _getDecoratorsApi = function () { return api; }; var api = { elementsDefinitionOrder: [["method"], ["field"]], initializeInstanceElements: function (O, elements) { ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { if (element.kind === kind && element.placement === "own") { this.defineClassElement(O, element); } }, this); }, this); }, initializeClassElements: function (F, elements) { var proto = F.prototype; ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { var placement = element.placement; if (element.kind === kind && (placement === "static" || placement === "prototype")) { var receiver = placement === "static" ? F : proto; this.defineClassElement(receiver, element); } }, this); }, this); }, defineClassElement: function (receiver, element) { var descriptor = element.descriptor; if (element.kind === "field") { var initializer = element.initializer; descriptor = { enumerable: descriptor.enumerable, writable: descriptor.writable, configurable: descriptor.configurable, value: initializer === void 0 ? void 0 : initializer.call(receiver) }; } Object.defineProperty(receiver, element.key, descriptor); }, decorateClass: function (elements, decorators) { var newElements = []; var finishers = []; var placements = { static: [], prototype: [], own: [] }; elements.forEach(function (element) { this.addElementPlacement(element, placements); }, this); elements.forEach(function (element) { if (!_hasDecorators(element)) return newElements.push(element); var elementFinishersExtras = this.decorateElement(element, placements); newElements.push(elementFinishersExtras.element); newElements.push.apply(newElements, elementFinishersExtras.extras); finishers.push.apply(finishers, elementFinishersExtras.finishers); }, this); if (!decorators) { return { elements: newElements, finishers: finishers }; } var result = this.decorateConstructor(newElements, decorators); finishers.push.apply(finishers, result.finishers); result.finishers = finishers; return result; }, addElementPlacement: function (element, placements, silent) { var keys = placements[element.placement]; if (!silent && keys.indexOf(element.key) !== -1) { throw new TypeError("Duplicated element (" + element.key + ")"); } keys.push(element.key); }, decorateElement: function (element, placements) { var extras = []; var finishers = []; for (var decorators = element.decorators, i = decorators.length - 1; i >= 0; i--) { var keys = placements[element.placement]; keys.splice(keys.indexOf(element.key), 1); var elementObject = this.fromElementDescriptor(element); var elementFinisherExtras = this.toElementFinisherExtras((0, decorators[i])(elementObject) || elementObject); element = elementFinisherExtras.element; this.addElementPlacement(element, placements); if (elementFinisherExtras.finisher) { finishers.push(elementFinisherExtras.finisher); } var newExtras = elementFinisherExtras.extras; if (newExtras) { for (var j = 0; j < newExtras.length; j++) { this.addElementPlacement(newExtras[j], placements); } extras.push.apply(extras, newExtras); } } return { element: element, finishers: finishers, extras: extras }; }, decorateConstructor: function (elements, decorators) { var finishers = []; for (var i = decorators.length - 1; i >= 0; i--) { var obj = this.fromClassDescriptor(elements); var elementsAndFinisher = this.toClassDescriptor((0, decorators[i])(obj) || obj); if (elementsAndFinisher.finisher !== undefined) { finishers.push(elementsAndFinisher.finisher); } if (elementsAndFinisher.elements !== undefined) { elements = elementsAndFinisher.elements; for (var j = 0; j < elements.length - 1; j++) { for (var k = j + 1; k < elements.length; k++) { if (elements[j].key === elements[k].key && elements[j].placement === elements[k].placement) { throw new TypeError("Duplicated element (" + elements[j].key + ")"); } } } } } return { elements: elements, finishers: finishers }; }, fromElementDescriptor: function (element) { var obj = { kind: element.kind, key: element.key, placement: element.placement, descriptor: element.descriptor }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); if (element.kind === "field") obj.initializer = element.initializer; return obj; }, toElementDescriptors: function (elementObjects) { if (elementObjects === undefined) return; return _toArray(elementObjects).map(function (elementObject) { var element = this.toElementDescriptor(elementObject); this.disallowProperty(elementObject, "finisher", "An element descriptor"); this.disallowProperty(elementObject, "extras", "An element descriptor"); return element; }, this); }, toElementDescriptor: function (elementObject) { var kind = String(elementObject.kind); if (kind !== "method" && kind !== "field") { throw new TypeError('An element descriptor\'s .kind property must be either "method" or' + ' "field", but a decorator created an element descriptor with' + ' .kind "' + kind + '"'); } var key = _toPropertyKey(elementObject.key); var placement = String(elementObject.placement); if (placement !== "static" && placement !== "prototype" && placement !== "own") { throw new TypeError('An element descriptor\'s .placement property must be one of "static",' + ' "prototype" or "own", but a decorator created an element descriptor' + ' with .placement "' + placement + '"'); } var descriptor = elementObject.descriptor; this.disallowProperty(elementObject, "elements", "An element descriptor"); var element = { kind: kind, key: key, placement: placement, descriptor: Object.assign({}, descriptor) }; if (kind !== "field") { this.disallowProperty(elementObject, "initializer", "A method descriptor"); } else { this.disallowProperty(descriptor, "get", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "set", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "value", "The property descriptor of a field descriptor"); element.initializer = elementObject.initializer; } return element; }, toElementFinisherExtras: function (elementObject) { var element = this.toElementDescriptor(elementObject); var finisher = _optionalCallableProperty(elementObject, "finisher"); var extras = this.toElementDescriptors(elementObject.extras); return { element: element, finisher: finisher, extras: extras }; }, fromClassDescriptor: function (elements) { var obj = { kind: "class", elements: elements.map(this.fromElementDescriptor, this) }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); return obj; }, toClassDescriptor: function (obj) { var kind = String(obj.kind); if (kind !== "class") { throw new TypeError('A class descriptor\'s .kind property must be "class", but a decorator' + ' created a class descriptor with .kind "' + kind + '"'); } this.disallowProperty(obj, "key", "A class descriptor"); this.disallowProperty(obj, "placement", "A class descriptor"); this.disallowProperty(obj, "descriptor", "A class descriptor"); this.disallowProperty(obj, "initializer", "A class descriptor"); this.disallowProperty(obj, "extras", "A class descriptor"); var finisher = _optionalCallableProperty(obj, "finisher"); var elements = this.toElementDescriptors(obj.elements); return { elements: elements, finisher: finisher }; }, runClassFinishers: function (constructor, finishers) { for (var i = 0; i < finishers.length; i++) { var newConstructor = (0, finishers[i])(constructor); if (newConstructor !== undefined) { if (typeof newConstructor !== "function") { throw new TypeError("Finishers must return a constructor."); } constructor = newConstructor; } } return constructor; }, disallowProperty: function (obj, name, objectType) { if (obj[name] !== undefined) { throw new TypeError(objectType + " can't have a ." + name + " property."); } } }; return api; }
+
+function _createElementDescriptor(def) { var key = _toPropertyKey(def.key); var descriptor; if (def.kind === "method") { descriptor = { value: def.value, writable: true, configurable: true, enumerable: false }; } else if (def.kind === "get") { descriptor = { get: def.value, configurable: true, enumerable: false }; } else if (def.kind === "set") { descriptor = { set: def.value, configurable: true, enumerable: false }; } else if (def.kind === "field") { descriptor = { configurable: true, writable: true, enumerable: true }; } var element = { kind: def.kind === "field" ? "field" : "method", key: key, placement: def.static ? "static" : def.kind === "field" ? "own" : "prototype", descriptor: descriptor }; if (def.decorators) element.decorators = def.decorators; if (def.kind === "field") element.initializer = def.value; return element; }
+
+function _coalesceGetterSetter(element, other) { if (element.descriptor.get !== undefined) { other.descriptor.get = element.descriptor.get; } else { other.descriptor.set = element.descriptor.set; } }
+
+function _coalesceClassElements(elements) { var newElements = []; var isSameElement = function (other) { return other.kind === "method" && other.key === element.key && other.placement === element.placement; }; for (var i = 0; i < elements.length; i++) { var element = elements[i]; var other; if (element.kind === "method" && (other = newElements.find(isSameElement))) { if (_isDataDescriptor(element.descriptor) || _isDataDescriptor(other.descriptor)) { if (_hasDecorators(element) || _hasDecorators(other)) { throw new ReferenceError("Duplicated methods (" + element.key + ") can't be decorated."); } other.descriptor = element.descriptor; } else { if (_hasDecorators(element)) { if (_hasDecorators(other)) { throw new ReferenceError("Decorators can't be placed on different accessors with for " + "the same property (" + element.key + ")."); } other.decorators = element.decorators; } _coalesceGetterSetter(element, other); } } else { newElements.push(element); } } return newElements; }
+
+function _hasDecorators(element) { return element.decorators && element.decorators.length; }
+
+function _isDataDescriptor(desc) { return desc !== undefined && !(desc.value === undefined && desc.writable === undefined); }
+
+function _optionalCallableProperty(obj, name) { var value = obj[name]; if (value !== undefined && typeof value !== "function") { throw new TypeError("Expected '" + name + "' to be a function"); } return value; }
+
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return typeof key === "symbol" ? key : String(key); }
+
+function _toPrimitive(input, hint) { if (typeof input !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (typeof res !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+
+function _toArray(arr) { return _arrayWithHoles(arr) || _iterableToArray(arr) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
+
+function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+
+
+let ContactNoSelectionView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__["customElement"])('contact-noselection-view')], function (_initialize, _Component) {
+  class ContactNoSelectionView extends _Component {
+    constructor(...args) {
+      super(...args);
+
+      _initialize(this);
+    }
+
+  }
+
+  return {
+    F: ContactNoSelectionView,
+    d: [{
+      kind: "method",
+      key: "render",
+      value: function render() {
+        return component__WEBPACK_IMPORTED_MODULE_0__["html"]`
+    <div class="no-selection text-center">
+      <h2>${this.message}</h2>
+    </div>
+    `;
+      }
+    }]
+  };
+}, component__WEBPACK_IMPORTED_MODULE_0__["Component"]);
+
+;
+/* harmony default export */ __webpack_exports__["default"] = (ContactNoSelectionView);
 
 /***/ }),
 
@@ -10282,7 +10850,7 @@ let ContactDetailView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__
 __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "default", function() { return _class; });
 /* harmony import */ var nextbone_routing__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! nextbone-routing */ "./node_modules/nextbone-routing/dist/nextbone-routing.js");
-/* harmony import */ var _entities__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../entities */ "./src/entities.js");
+/* harmony import */ var entities__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! entities */ "./src/common/entities.js");
 /* harmony import */ var _view__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./view */ "./src/contacts/view.js");
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
@@ -10291,10 +10859,10 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
 
 class _class extends nextbone_routing__WEBPACK_IMPORTED_MODULE_0__["Route"] {
   activate() {
-    const contactsPromise = this.context.api.getContactList();
-    return contactsPromise.then(contactsData => {
-      this.contacts = new _entities__WEBPACK_IMPORTED_MODULE_1__["Contacts"](contactsData);
-    });
+    if (!this.contacts) {
+      this.contacts = new entities__WEBPACK_IMPORTED_MODULE_1__["Contacts"]();
+      return this.contacts.fetch();
+    }
   }
 
   prepareEl(el) {
@@ -10391,26 +10959,27 @@ let ContactsView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__["cus
       key: "render",
       value: function render() {
         return component__WEBPACK_IMPORTED_MODULE_0__["html"]`
-      <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
-          <div class="navbar-header">
-              <a class="navbar-brand" href="#">
-                  Contacts
-              </a>
-          </div>
+      <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top" role="navigation">
+          <a class="navbar-brand" href="#">
+              Contacts
+          </a>          
       </nav>
 
       <div class="container">
+          <div class="row mb-2">
+            <div class="col-md-4">
+              <button class="btn btn-secondary btn-block">Add Contact</button>
+            </div>            
+          </div>
           <div class="row">
-              <div class="col-md-4">
+              <div class="col-md-4">              
                   <div class="contact-list">
                     <ul class="list-group" routerlinks>
-                    ${this.contacts.map(contact => component__WEBPACK_IMPORTED_MODULE_0__["html"]`
-                      <li class="list-group-item" route="contactdetail" param-contactid=${contact.get('id')}>
-                      <a>
-                        <h4 class="list-group-item-heading">${contact.get('fullName')}</h4>
-                        <p class="list-group-item-text">${contact.get('email')}</p>
-                      </a>
-                      </li>                        
+                    ${this.contacts.map(contact => component__WEBPACK_IMPORTED_MODULE_0__["html"]`                      
+                      <a class="list-group-item list-group-item-action" route="contacts.edit" param-contactid=${contact.get('id')}>
+                        <h4>${contact.get('fullName')}</h4>
+                        <p class="mb-0">${contact.get('email')}</p>
+                      </a>                      
                       `)}
                     </ul>
                   </div>
@@ -10429,91 +10998,6 @@ let ContactsView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__["cus
 
 /***/ }),
 
-/***/ "./src/entities.js":
-/*!*************************!*\
-  !*** ./src/entities.js ***!
-  \*************************/
-/*! exports provided: Contact, Contacts */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Contact", function() { return Contact; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Contacts", function() { return Contacts; });
-/* harmony import */ var nextbone__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! nextbone */ "./node_modules/nextbone/nextbone.js");
-/* harmony import */ var nextbone_computed__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! nextbone/computed */ "./node_modules/nextbone/computed.js");
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
-function _decorate(decorators, factory, superClass, mixins) { var api = _getDecoratorsApi(); if (mixins) { for (var i = 0; i < mixins.length; i++) { api = mixins[i](api); } } var r = factory(function initialize(O) { api.initializeInstanceElements(O, decorated.elements); }, superClass); var decorated = api.decorateClass(_coalesceClassElements(r.d.map(_createElementDescriptor)), decorators); api.initializeClassElements(r.F, decorated.elements); return api.runClassFinishers(r.F, decorated.finishers); }
-
-function _getDecoratorsApi() { _getDecoratorsApi = function () { return api; }; var api = { elementsDefinitionOrder: [["method"], ["field"]], initializeInstanceElements: function (O, elements) { ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { if (element.kind === kind && element.placement === "own") { this.defineClassElement(O, element); } }, this); }, this); }, initializeClassElements: function (F, elements) { var proto = F.prototype; ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { var placement = element.placement; if (element.kind === kind && (placement === "static" || placement === "prototype")) { var receiver = placement === "static" ? F : proto; this.defineClassElement(receiver, element); } }, this); }, this); }, defineClassElement: function (receiver, element) { var descriptor = element.descriptor; if (element.kind === "field") { var initializer = element.initializer; descriptor = { enumerable: descriptor.enumerable, writable: descriptor.writable, configurable: descriptor.configurable, value: initializer === void 0 ? void 0 : initializer.call(receiver) }; } Object.defineProperty(receiver, element.key, descriptor); }, decorateClass: function (elements, decorators) { var newElements = []; var finishers = []; var placements = { static: [], prototype: [], own: [] }; elements.forEach(function (element) { this.addElementPlacement(element, placements); }, this); elements.forEach(function (element) { if (!_hasDecorators(element)) return newElements.push(element); var elementFinishersExtras = this.decorateElement(element, placements); newElements.push(elementFinishersExtras.element); newElements.push.apply(newElements, elementFinishersExtras.extras); finishers.push.apply(finishers, elementFinishersExtras.finishers); }, this); if (!decorators) { return { elements: newElements, finishers: finishers }; } var result = this.decorateConstructor(newElements, decorators); finishers.push.apply(finishers, result.finishers); result.finishers = finishers; return result; }, addElementPlacement: function (element, placements, silent) { var keys = placements[element.placement]; if (!silent && keys.indexOf(element.key) !== -1) { throw new TypeError("Duplicated element (" + element.key + ")"); } keys.push(element.key); }, decorateElement: function (element, placements) { var extras = []; var finishers = []; for (var decorators = element.decorators, i = decorators.length - 1; i >= 0; i--) { var keys = placements[element.placement]; keys.splice(keys.indexOf(element.key), 1); var elementObject = this.fromElementDescriptor(element); var elementFinisherExtras = this.toElementFinisherExtras((0, decorators[i])(elementObject) || elementObject); element = elementFinisherExtras.element; this.addElementPlacement(element, placements); if (elementFinisherExtras.finisher) { finishers.push(elementFinisherExtras.finisher); } var newExtras = elementFinisherExtras.extras; if (newExtras) { for (var j = 0; j < newExtras.length; j++) { this.addElementPlacement(newExtras[j], placements); } extras.push.apply(extras, newExtras); } } return { element: element, finishers: finishers, extras: extras }; }, decorateConstructor: function (elements, decorators) { var finishers = []; for (var i = decorators.length - 1; i >= 0; i--) { var obj = this.fromClassDescriptor(elements); var elementsAndFinisher = this.toClassDescriptor((0, decorators[i])(obj) || obj); if (elementsAndFinisher.finisher !== undefined) { finishers.push(elementsAndFinisher.finisher); } if (elementsAndFinisher.elements !== undefined) { elements = elementsAndFinisher.elements; for (var j = 0; j < elements.length - 1; j++) { for (var k = j + 1; k < elements.length; k++) { if (elements[j].key === elements[k].key && elements[j].placement === elements[k].placement) { throw new TypeError("Duplicated element (" + elements[j].key + ")"); } } } } } return { elements: elements, finishers: finishers }; }, fromElementDescriptor: function (element) { var obj = { kind: element.kind, key: element.key, placement: element.placement, descriptor: element.descriptor }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); if (element.kind === "field") obj.initializer = element.initializer; return obj; }, toElementDescriptors: function (elementObjects) { if (elementObjects === undefined) return; return _toArray(elementObjects).map(function (elementObject) { var element = this.toElementDescriptor(elementObject); this.disallowProperty(elementObject, "finisher", "An element descriptor"); this.disallowProperty(elementObject, "extras", "An element descriptor"); return element; }, this); }, toElementDescriptor: function (elementObject) { var kind = String(elementObject.kind); if (kind !== "method" && kind !== "field") { throw new TypeError('An element descriptor\'s .kind property must be either "method" or' + ' "field", but a decorator created an element descriptor with' + ' .kind "' + kind + '"'); } var key = _toPropertyKey(elementObject.key); var placement = String(elementObject.placement); if (placement !== "static" && placement !== "prototype" && placement !== "own") { throw new TypeError('An element descriptor\'s .placement property must be one of "static",' + ' "prototype" or "own", but a decorator created an element descriptor' + ' with .placement "' + placement + '"'); } var descriptor = elementObject.descriptor; this.disallowProperty(elementObject, "elements", "An element descriptor"); var element = { kind: kind, key: key, placement: placement, descriptor: Object.assign({}, descriptor) }; if (kind !== "field") { this.disallowProperty(elementObject, "initializer", "A method descriptor"); } else { this.disallowProperty(descriptor, "get", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "set", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "value", "The property descriptor of a field descriptor"); element.initializer = elementObject.initializer; } return element; }, toElementFinisherExtras: function (elementObject) { var element = this.toElementDescriptor(elementObject); var finisher = _optionalCallableProperty(elementObject, "finisher"); var extras = this.toElementDescriptors(elementObject.extras); return { element: element, finisher: finisher, extras: extras }; }, fromClassDescriptor: function (elements) { var obj = { kind: "class", elements: elements.map(this.fromElementDescriptor, this) }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); return obj; }, toClassDescriptor: function (obj) { var kind = String(obj.kind); if (kind !== "class") { throw new TypeError('A class descriptor\'s .kind property must be "class", but a decorator' + ' created a class descriptor with .kind "' + kind + '"'); } this.disallowProperty(obj, "key", "A class descriptor"); this.disallowProperty(obj, "placement", "A class descriptor"); this.disallowProperty(obj, "descriptor", "A class descriptor"); this.disallowProperty(obj, "initializer", "A class descriptor"); this.disallowProperty(obj, "extras", "A class descriptor"); var finisher = _optionalCallableProperty(obj, "finisher"); var elements = this.toElementDescriptors(obj.elements); return { elements: elements, finisher: finisher }; }, runClassFinishers: function (constructor, finishers) { for (var i = 0; i < finishers.length; i++) { var newConstructor = (0, finishers[i])(constructor); if (newConstructor !== undefined) { if (typeof newConstructor !== "function") { throw new TypeError("Finishers must return a constructor."); } constructor = newConstructor; } } return constructor; }, disallowProperty: function (obj, name, objectType) { if (obj[name] !== undefined) { throw new TypeError(objectType + " can't have a ." + name + " property."); } } }; return api; }
-
-function _createElementDescriptor(def) { var key = _toPropertyKey(def.key); var descriptor; if (def.kind === "method") { descriptor = { value: def.value, writable: true, configurable: true, enumerable: false }; } else if (def.kind === "get") { descriptor = { get: def.value, configurable: true, enumerable: false }; } else if (def.kind === "set") { descriptor = { set: def.value, configurable: true, enumerable: false }; } else if (def.kind === "field") { descriptor = { configurable: true, writable: true, enumerable: true }; } var element = { kind: def.kind === "field" ? "field" : "method", key: key, placement: def.static ? "static" : def.kind === "field" ? "own" : "prototype", descriptor: descriptor }; if (def.decorators) element.decorators = def.decorators; if (def.kind === "field") element.initializer = def.value; return element; }
-
-function _coalesceGetterSetter(element, other) { if (element.descriptor.get !== undefined) { other.descriptor.get = element.descriptor.get; } else { other.descriptor.set = element.descriptor.set; } }
-
-function _coalesceClassElements(elements) { var newElements = []; var isSameElement = function (other) { return other.kind === "method" && other.key === element.key && other.placement === element.placement; }; for (var i = 0; i < elements.length; i++) { var element = elements[i]; var other; if (element.kind === "method" && (other = newElements.find(isSameElement))) { if (_isDataDescriptor(element.descriptor) || _isDataDescriptor(other.descriptor)) { if (_hasDecorators(element) || _hasDecorators(other)) { throw new ReferenceError("Duplicated methods (" + element.key + ") can't be decorated."); } other.descriptor = element.descriptor; } else { if (_hasDecorators(element)) { if (_hasDecorators(other)) { throw new ReferenceError("Decorators can't be placed on different accessors with for " + "the same property (" + element.key + ")."); } other.decorators = element.decorators; } _coalesceGetterSetter(element, other); } } else { newElements.push(element); } } return newElements; }
-
-function _hasDecorators(element) { return element.decorators && element.decorators.length; }
-
-function _isDataDescriptor(desc) { return desc !== undefined && !(desc.value === undefined && desc.writable === undefined); }
-
-function _optionalCallableProperty(obj, name) { var value = obj[name]; if (value !== undefined && typeof value !== "function") { throw new TypeError("Expected '" + name + "' to be a function"); } return value; }
-
-function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return typeof key === "symbol" ? key : String(key); }
-
-function _toPrimitive(input, hint) { if (typeof input !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (typeof res !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
-
-function _toArray(arr) { return _arrayWithHoles(arr) || _iterableToArray(arr) || _nonIterableRest(); }
-
-function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
-
-function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
-
-function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
-
-
-
-let Contact = _decorate([Object(nextbone_computed__WEBPACK_IMPORTED_MODULE_1__["computed"])({
-  fullName: ['firstName', 'lastName', ({
-    firstName,
-    lastName
-  }) => `${firstName} ${lastName}`]
-})], function (_initialize, _Model) {
-  class Contact extends _Model {
-    constructor(...args) {
-      super(...args);
-
-      _initialize(this);
-    }
-
-  }
-
-  return {
-    F: Contact,
-    d: [{
-      kind: "field",
-      static: true,
-      key: "defaults",
-
-      value() {
-        return {
-          firstName: '',
-          lastName: '',
-          email: '',
-          phoneNumber: ''
-        };
-      }
-
-    }]
-  };
-}, nextbone__WEBPACK_IMPORTED_MODULE_0__["Model"]);
-class Contacts extends nextbone__WEBPACK_IMPORTED_MODULE_0__["Collection"] {}
-
-_defineProperty(Contacts, "model", Contact);
-
-/***/ }),
-
 /***/ "./src/main.js":
 /*!*********************!*\
   !*** ./src/main.js ***!
@@ -10528,8 +11012,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var nextbone_routing__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! nextbone-routing */ "./node_modules/nextbone-routing/dist/nextbone-routing.js");
 /* harmony import */ var _application_route__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./application/route */ "./src/application/route.js");
 /* harmony import */ var _contacts_route__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./contacts/route */ "./src/contacts/route.js");
-/* harmony import */ var _contactdetail_route__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./contactdetail/route */ "./src/contactdetail/route.js");
-/* harmony import */ var _noselection_view__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./noselection/view */ "./src/noselection/view.js");
+/* harmony import */ var _contacts_edit_route__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./contacts/edit/route */ "./src/contacts/edit/route.js");
+/* harmony import */ var _contacts_noselection_view__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./contacts/noselection/view */ "./src/contacts/noselection/view.js");
 
 
 
@@ -10550,97 +11034,26 @@ router.map(function (route) {
       class: _contacts_route__WEBPACK_IMPORTED_MODULE_3__["default"],
       abstract: true
     }, function () {
-      route('contacts.default', {
+      route('contacts.noselection', {
         path: '',
-        component: _noselection_view__WEBPACK_IMPORTED_MODULE_5__["default"],
+        component: _contacts_noselection_view__WEBPACK_IMPORTED_MODULE_5__["default"],
         properties: {
           message: 'Please Select a Contact.'
         }
       });
-      route('contactdetail', {
+      route('contacts.edit', {
         path: ':contactid',
-        class: _contactdetail_route__WEBPACK_IMPORTED_MODULE_4__["default"]
+        class: _contacts_edit_route__WEBPACK_IMPORTED_MODULE_4__["default"]
       });
     });
   });
 });
 router.on('before:transition', function (transition) {
   if (transition.path === '/') {
-    transition.redirectTo('contacts.default');
+    transition.redirectTo('contacts');
   }
 });
 router.listen();
-
-/***/ }),
-
-/***/ "./src/noselection/view.js":
-/*!*********************************!*\
-  !*** ./src/noselection/view.js ***!
-  \*********************************/
-/*! exports provided: default */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony import */ var component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! component */ "./src/common/component.js");
-function _decorate(decorators, factory, superClass, mixins) { var api = _getDecoratorsApi(); if (mixins) { for (var i = 0; i < mixins.length; i++) { api = mixins[i](api); } } var r = factory(function initialize(O) { api.initializeInstanceElements(O, decorated.elements); }, superClass); var decorated = api.decorateClass(_coalesceClassElements(r.d.map(_createElementDescriptor)), decorators); api.initializeClassElements(r.F, decorated.elements); return api.runClassFinishers(r.F, decorated.finishers); }
-
-function _getDecoratorsApi() { _getDecoratorsApi = function () { return api; }; var api = { elementsDefinitionOrder: [["method"], ["field"]], initializeInstanceElements: function (O, elements) { ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { if (element.kind === kind && element.placement === "own") { this.defineClassElement(O, element); } }, this); }, this); }, initializeClassElements: function (F, elements) { var proto = F.prototype; ["method", "field"].forEach(function (kind) { elements.forEach(function (element) { var placement = element.placement; if (element.kind === kind && (placement === "static" || placement === "prototype")) { var receiver = placement === "static" ? F : proto; this.defineClassElement(receiver, element); } }, this); }, this); }, defineClassElement: function (receiver, element) { var descriptor = element.descriptor; if (element.kind === "field") { var initializer = element.initializer; descriptor = { enumerable: descriptor.enumerable, writable: descriptor.writable, configurable: descriptor.configurable, value: initializer === void 0 ? void 0 : initializer.call(receiver) }; } Object.defineProperty(receiver, element.key, descriptor); }, decorateClass: function (elements, decorators) { var newElements = []; var finishers = []; var placements = { static: [], prototype: [], own: [] }; elements.forEach(function (element) { this.addElementPlacement(element, placements); }, this); elements.forEach(function (element) { if (!_hasDecorators(element)) return newElements.push(element); var elementFinishersExtras = this.decorateElement(element, placements); newElements.push(elementFinishersExtras.element); newElements.push.apply(newElements, elementFinishersExtras.extras); finishers.push.apply(finishers, elementFinishersExtras.finishers); }, this); if (!decorators) { return { elements: newElements, finishers: finishers }; } var result = this.decorateConstructor(newElements, decorators); finishers.push.apply(finishers, result.finishers); result.finishers = finishers; return result; }, addElementPlacement: function (element, placements, silent) { var keys = placements[element.placement]; if (!silent && keys.indexOf(element.key) !== -1) { throw new TypeError("Duplicated element (" + element.key + ")"); } keys.push(element.key); }, decorateElement: function (element, placements) { var extras = []; var finishers = []; for (var decorators = element.decorators, i = decorators.length - 1; i >= 0; i--) { var keys = placements[element.placement]; keys.splice(keys.indexOf(element.key), 1); var elementObject = this.fromElementDescriptor(element); var elementFinisherExtras = this.toElementFinisherExtras((0, decorators[i])(elementObject) || elementObject); element = elementFinisherExtras.element; this.addElementPlacement(element, placements); if (elementFinisherExtras.finisher) { finishers.push(elementFinisherExtras.finisher); } var newExtras = elementFinisherExtras.extras; if (newExtras) { for (var j = 0; j < newExtras.length; j++) { this.addElementPlacement(newExtras[j], placements); } extras.push.apply(extras, newExtras); } } return { element: element, finishers: finishers, extras: extras }; }, decorateConstructor: function (elements, decorators) { var finishers = []; for (var i = decorators.length - 1; i >= 0; i--) { var obj = this.fromClassDescriptor(elements); var elementsAndFinisher = this.toClassDescriptor((0, decorators[i])(obj) || obj); if (elementsAndFinisher.finisher !== undefined) { finishers.push(elementsAndFinisher.finisher); } if (elementsAndFinisher.elements !== undefined) { elements = elementsAndFinisher.elements; for (var j = 0; j < elements.length - 1; j++) { for (var k = j + 1; k < elements.length; k++) { if (elements[j].key === elements[k].key && elements[j].placement === elements[k].placement) { throw new TypeError("Duplicated element (" + elements[j].key + ")"); } } } } } return { elements: elements, finishers: finishers }; }, fromElementDescriptor: function (element) { var obj = { kind: element.kind, key: element.key, placement: element.placement, descriptor: element.descriptor }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); if (element.kind === "field") obj.initializer = element.initializer; return obj; }, toElementDescriptors: function (elementObjects) { if (elementObjects === undefined) return; return _toArray(elementObjects).map(function (elementObject) { var element = this.toElementDescriptor(elementObject); this.disallowProperty(elementObject, "finisher", "An element descriptor"); this.disallowProperty(elementObject, "extras", "An element descriptor"); return element; }, this); }, toElementDescriptor: function (elementObject) { var kind = String(elementObject.kind); if (kind !== "method" && kind !== "field") { throw new TypeError('An element descriptor\'s .kind property must be either "method" or' + ' "field", but a decorator created an element descriptor with' + ' .kind "' + kind + '"'); } var key = _toPropertyKey(elementObject.key); var placement = String(elementObject.placement); if (placement !== "static" && placement !== "prototype" && placement !== "own") { throw new TypeError('An element descriptor\'s .placement property must be one of "static",' + ' "prototype" or "own", but a decorator created an element descriptor' + ' with .placement "' + placement + '"'); } var descriptor = elementObject.descriptor; this.disallowProperty(elementObject, "elements", "An element descriptor"); var element = { kind: kind, key: key, placement: placement, descriptor: Object.assign({}, descriptor) }; if (kind !== "field") { this.disallowProperty(elementObject, "initializer", "A method descriptor"); } else { this.disallowProperty(descriptor, "get", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "set", "The property descriptor of a field descriptor"); this.disallowProperty(descriptor, "value", "The property descriptor of a field descriptor"); element.initializer = elementObject.initializer; } return element; }, toElementFinisherExtras: function (elementObject) { var element = this.toElementDescriptor(elementObject); var finisher = _optionalCallableProperty(elementObject, "finisher"); var extras = this.toElementDescriptors(elementObject.extras); return { element: element, finisher: finisher, extras: extras }; }, fromClassDescriptor: function (elements) { var obj = { kind: "class", elements: elements.map(this.fromElementDescriptor, this) }; var desc = { value: "Descriptor", configurable: true }; Object.defineProperty(obj, Symbol.toStringTag, desc); return obj; }, toClassDescriptor: function (obj) { var kind = String(obj.kind); if (kind !== "class") { throw new TypeError('A class descriptor\'s .kind property must be "class", but a decorator' + ' created a class descriptor with .kind "' + kind + '"'); } this.disallowProperty(obj, "key", "A class descriptor"); this.disallowProperty(obj, "placement", "A class descriptor"); this.disallowProperty(obj, "descriptor", "A class descriptor"); this.disallowProperty(obj, "initializer", "A class descriptor"); this.disallowProperty(obj, "extras", "A class descriptor"); var finisher = _optionalCallableProperty(obj, "finisher"); var elements = this.toElementDescriptors(obj.elements); return { elements: elements, finisher: finisher }; }, runClassFinishers: function (constructor, finishers) { for (var i = 0; i < finishers.length; i++) { var newConstructor = (0, finishers[i])(constructor); if (newConstructor !== undefined) { if (typeof newConstructor !== "function") { throw new TypeError("Finishers must return a constructor."); } constructor = newConstructor; } } return constructor; }, disallowProperty: function (obj, name, objectType) { if (obj[name] !== undefined) { throw new TypeError(objectType + " can't have a ." + name + " property."); } } }; return api; }
-
-function _createElementDescriptor(def) { var key = _toPropertyKey(def.key); var descriptor; if (def.kind === "method") { descriptor = { value: def.value, writable: true, configurable: true, enumerable: false }; } else if (def.kind === "get") { descriptor = { get: def.value, configurable: true, enumerable: false }; } else if (def.kind === "set") { descriptor = { set: def.value, configurable: true, enumerable: false }; } else if (def.kind === "field") { descriptor = { configurable: true, writable: true, enumerable: true }; } var element = { kind: def.kind === "field" ? "field" : "method", key: key, placement: def.static ? "static" : def.kind === "field" ? "own" : "prototype", descriptor: descriptor }; if (def.decorators) element.decorators = def.decorators; if (def.kind === "field") element.initializer = def.value; return element; }
-
-function _coalesceGetterSetter(element, other) { if (element.descriptor.get !== undefined) { other.descriptor.get = element.descriptor.get; } else { other.descriptor.set = element.descriptor.set; } }
-
-function _coalesceClassElements(elements) { var newElements = []; var isSameElement = function (other) { return other.kind === "method" && other.key === element.key && other.placement === element.placement; }; for (var i = 0; i < elements.length; i++) { var element = elements[i]; var other; if (element.kind === "method" && (other = newElements.find(isSameElement))) { if (_isDataDescriptor(element.descriptor) || _isDataDescriptor(other.descriptor)) { if (_hasDecorators(element) || _hasDecorators(other)) { throw new ReferenceError("Duplicated methods (" + element.key + ") can't be decorated."); } other.descriptor = element.descriptor; } else { if (_hasDecorators(element)) { if (_hasDecorators(other)) { throw new ReferenceError("Decorators can't be placed on different accessors with for " + "the same property (" + element.key + ")."); } other.decorators = element.decorators; } _coalesceGetterSetter(element, other); } } else { newElements.push(element); } } return newElements; }
-
-function _hasDecorators(element) { return element.decorators && element.decorators.length; }
-
-function _isDataDescriptor(desc) { return desc !== undefined && !(desc.value === undefined && desc.writable === undefined); }
-
-function _optionalCallableProperty(obj, name) { var value = obj[name]; if (value !== undefined && typeof value !== "function") { throw new TypeError("Expected '" + name + "' to be a function"); } return value; }
-
-function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return typeof key === "symbol" ? key : String(key); }
-
-function _toPrimitive(input, hint) { if (typeof input !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (typeof res !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
-
-function _toArray(arr) { return _arrayWithHoles(arr) || _iterableToArray(arr) || _nonIterableRest(); }
-
-function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
-
-function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
-
-function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
-
-
-
-let ContactNoSelectionView = _decorate([Object(component__WEBPACK_IMPORTED_MODULE_0__["customElement"])('contact-noselection-view')], function (_initialize, _Component) {
-  class ContactNoSelectionView extends _Component {
-    constructor(...args) {
-      super(...args);
-
-      _initialize(this);
-    }
-
-  }
-
-  return {
-    F: ContactNoSelectionView,
-    d: [{
-      kind: "method",
-      key: "render",
-      value: function render() {
-        return component__WEBPACK_IMPORTED_MODULE_0__["html"]`
-    <div class="no-selection text-center">
-      <h2>${this.message}</h2>
-    </div>
-    `;
-      }
-    }]
-  };
-}, component__WEBPACK_IMPORTED_MODULE_0__["Component"]);
-
-;
-/* harmony default export */ __webpack_exports__["default"] = (ContactNoSelectionView);
 
 /***/ }),
 
@@ -10652,110 +11065,6 @@ let ContactNoSelectionView = _decorate([Object(component__WEBPACK_IMPORTED_MODUL
 /***/ (function(module, exports) {
 
 
-
-/***/ }),
-
-/***/ "./src/web-api.js":
-/*!************************!*\
-  !*** ./src/web-api.js ***!
-  \************************/
-/*! exports provided: WebAPI */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "WebAPI", function() { return WebAPI; });
-let latency = 200;
-let id = 0;
-
-function getId() {
-  return ++id;
-}
-
-let contacts = [{
-  id: getId(),
-  firstName: 'John',
-  lastName: 'Tolkien',
-  email: 'tolkien@inklings.com',
-  phoneNumber: '867-5309'
-}, {
-  id: getId(),
-  firstName: 'Clive',
-  lastName: 'Lewis',
-  email: 'lewis@inklings.com',
-  phoneNumber: '867-5309'
-}, {
-  id: getId(),
-  firstName: 'Owen',
-  lastName: 'Barfield',
-  email: 'barfield@inklings.com',
-  phoneNumber: '867-5309'
-}, {
-  id: getId(),
-  firstName: 'Charles',
-  lastName: 'Williams',
-  email: 'williams@inklings.com',
-  phoneNumber: '867-5309'
-}, {
-  id: getId(),
-  firstName: 'Roger',
-  lastName: 'Green',
-  email: 'green@inklings.com',
-  phoneNumber: '867-5309'
-}];
-class WebAPI {
-  getContactList() {
-    this.isRequesting = true;
-    return new Promise(resolve => {
-      setTimeout(() => {
-        let results = contacts.map(x => {
-          return {
-            id: x.id,
-            firstName: x.firstName,
-            lastName: x.lastName,
-            email: x.email
-          };
-        });
-        resolve(results);
-        this.isRequesting = false;
-      }, latency);
-    });
-  }
-
-  getContactDetails(id) {
-    this.isRequesting = true;
-    return new Promise(resolve => {
-      setTimeout(() => {
-        let found = contacts.filter(x => x.id == id)[0];
-        resolve(JSON.parse(JSON.stringify(found)));
-        this.isRequesting = false;
-      }, latency);
-    });
-  }
-
-  saveContact(contact) {
-    this.isRequesting = true;
-    return new Promise(resolve => {
-      setTimeout(() => {
-        let instance = JSON.parse(JSON.stringify(contact));
-        let found = contacts.filter(x => x.id == contact.id)[0];
-
-        if (found) {
-          let index = contacts.indexOf(found);
-          contacts[index] = instance;
-        } else {
-          instance.id = getId();
-          contacts.push(instance);
-        }
-
-        this.isRequesting = false;
-        resolve(instance);
-      }, latency);
-    });
-  }
-
-}
-WebAPI.prototype.isRequesting = false;
 
 /***/ })
 
