@@ -1,4 +1,4 @@
-import { Component, html, customElement } from "component";
+import { Component, html, customElement, classMap } from "component";
 import {event, state} from 'nextbone'
 import {formBind} from 'nextbone/formbind'
 import { Contact } from 'entities'
@@ -43,7 +43,7 @@ class ContactEditView extends Component {
 
 
       <div class="d-flex justify-content-between mt-4">
-        <button id="delete-contact" action="delete" class="btn btn-danger pr-5 pl-5">Delete</button>
+        <button id="delete-contact" action="delete" class="btn btn-danger pr-5 pl-5 ${classMap({invisible: this.model.isNew()})}">Delete</button>
         <button id="save-contact" action="save" class="btn btn-success pr-5 pl-5">Save</button>
       </div>
     `
