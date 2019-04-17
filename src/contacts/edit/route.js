@@ -7,7 +7,7 @@ export default class extends Route {
 
   activate(transition) {
     let contacts = this.context.contacts;
-    this.contact = contacts.findWhere({id: +transition.params.contactid});
+    this.contact = contacts.find(model => model.id == transition.params.contactid);
     if (!this.contact) {
       throw new Error('Unable to resolve contact with id', transition.params.contactid);
     }
@@ -15,7 +15,7 @@ export default class extends Route {
 
   prepareEl(el) {
     super.prepareEl(el)
-    el.model = this.contact.clone()
+    el.model = this.contact
   }
 
 
@@ -24,5 +24,10 @@ export default class extends Route {
     const model = e.detail.model
     const attributes = _.clone(model.attributes);
     this.contact.save(attributes);    
+  }
+
+  @elEvent('delete:model')
+  onDeleteModel() {  
+    this.contact.destroy().then(()=> this.$router.transitionTo('contacts'));    
   }
 };

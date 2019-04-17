@@ -20,8 +20,8 @@ class ContactsView extends Component {
 
       <div class="container">
           <div class="row mb-2">
-            <div class="col-md-4">
-              <button class="btn btn-secondary btn-block">Add Contact</button>
+            <div class="col-md-4" routerlinks>
+              <button class="btn btn-secondary btn-block" route="contacts.new">Add Contact</button>
             </div>            
           </div>
           <div class="row">

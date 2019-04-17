@@ -1,19 +1,20 @@
 import { Component, html, customElement } from "component";
 import {event, state} from 'nextbone'
 import {formBind} from 'nextbone/formbind'
+import { Contact } from 'entities'
 
 @customElement('contact-edit-view')
 @formBind
 class ContactEditView extends Component {
-  @state
-  model
+  @state({copy: true})
+  model = new Contact()
   
   render () {
-    const {firstName, lastName, email, phoneNumber} = this.model.attributes
+    const {firstName, lastName, email, phoneNumber, fullName} = this.model.attributes
     return html`
         <div class="card">
           <div class="card-header text-white bg-primary">
-              <h4 class="mb-0">Profile</h4>
+              <h4 class="mb-0">${ fullName } Profile</h4>
           </div>
           <div class="card-body">
               <form role="form">
@@ -41,16 +42,18 @@ class ContactEditView extends Component {
       </div>
 
 
-      <div class="button-bar">
-        <button id="save-contact" class="btn btn-success pr-5 pl-5">Save</button>
+      <div class="d-flex justify-content-between mt-4">
+        <button id="delete-contact" action="delete" class="btn btn-danger pr-5 pl-5">Delete</button>
+        <button id="save-contact" action="save" class="btn btn-success pr-5 pl-5">Save</button>
       </div>
     `
   };
 
-  @event('click', '#save-contact')
-  saveContactClick(e) {
+  @event('click', 'button[action]')
+  actionClick(e) {
     e.preventDefault()
-    this.dispatchEvent(new CustomEvent('save:model', {detail: {model: this.model}}))
+    const action = e.selectorTarget.getAttribute('action')
+    this.dispatchEvent(new CustomEvent(`${action}:model`, {detail: {model: this.model}}))
   }
 };
 
