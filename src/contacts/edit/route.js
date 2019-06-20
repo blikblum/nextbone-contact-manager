@@ -1,9 +1,13 @@
-import {Route, elEvent} from "nextbone-routing";
+import {Route, elEvent, elProperty} from "nextbone-routing";
 import _ from 'underscore';
 import ContactEditView from './view';
+import { modals } from "modals";
 
 export default class extends Route {
   static component = ContactEditView;
+
+  @elProperty('model')
+  contact
 
   activate(transition) {
     let contacts = this.context.contacts;
@@ -13,11 +17,16 @@ export default class extends Route {
     }
   }
 
-  prepareEl(el) {
-    super.prepareEl(el)
-    el.model = this.contact
+  deactivate(transition) {
+    if (!this.el.model.id || !_.isEqual(this.contact.attributes, this.el.model.attributes)) {
+      return modals.confirm({
+        title: 'Contact has unsaved changes',
+        text: 'Do you want to exit anyway?'
+      }).then((result) => {
+        if (!result) transition.cancel()
+      })
+    }
   }
-
 
   @elEvent('save:model')
   onSaveModel(e) {

@@ -11,10 +11,11 @@ class ContactEditView extends Component {
   
   render () {
     const {firstName, lastName, email, phoneNumber, fullName} = this.model.attributes
+    const isNew = this.model.isNew()
     return html`
         <div class="card">
           <div class="card-header text-white bg-primary">
-              <h4 class="mb-0">${ fullName } Profile</h4>
+              <h4 class="mb-0">${ isNew ? (fullName.trim() || 'New Contact') : fullName } Profile</h4>
           </div>
           <div class="card-body">
               <form role="form">
@@ -44,7 +45,7 @@ class ContactEditView extends Component {
 
       <div class="d-flex justify-content-between mt-4">
         <button id="delete-contact" action="delete" class="btn btn-danger pr-5 pl-5 ${classMap({invisible: this.model.isNew()})}">Delete</button>
-        <button id="save-contact" action="save" class="btn btn-success pr-5 pl-5">Save</button>
+        <button id="save-contact" action="save" class="btn btn-primary pr-5 pl-5">Save</button>
       </div>
     `
   };
