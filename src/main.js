@@ -4,7 +4,7 @@ import ApplicationRoute from './application/route';
 import ContactsRoute from './contacts/route';
 import ContactEditRoute from './contacts/edit/route';
 import ContactNewRoute from './contacts/new/route';
-import ContactNoSelectionView from './contacts/noselection/view';
+import ContactNoSelectionView from './contacts/noselection/contact-noselection-view';
 
 const router = new Router({outlet: '#app', log: true, logError: true});
 

@@ -1,6 +1,6 @@
 import {Route, elProperty} from "nextbone-routing";
 import {Contacts} from 'entities';
-import ContactsView from './view';
+import ContactsView from './contacts-view';
 
 export default class extends Route {  
   static component = ContactsView;

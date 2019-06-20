@@ -1,6 +1,6 @@
 import {Route, elEvent, elProperty} from "nextbone-routing";
 import _ from 'underscore';
-import ContactEditView from './view';
+import ContactEditView from './contact-edit-view';
 import { modals } from "modals";
 
 export default class extends Route {
