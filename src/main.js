@@ -3,11 +3,16 @@ import { Router } from "nextbone-routing";
 import ApplicationRoute from './application/route';
 import { Contacts } from 'entities';
 import { registerContactsRoute } from './contacts/register';
+import { bindLocalStorage } from 'nextbone/localStorage'
+import { getContactsSample } from "sample-data";
+
 
 const router = new Router({outlet: '#app', log: true, logError: true});
 
 const getContacts = () => {
-  return new Contacts()
+  const contacts = new Contacts()
+  bindLocalStorage(contacts, 'Contacts', {initialData: getContactsSample})
+  return contacts
 }
 
 router.map(function (route) {

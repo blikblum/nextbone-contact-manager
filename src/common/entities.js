@@ -1,8 +1,5 @@
 import { Model, Collection } from "nextbone";
-import { computed } from 'nextbone/computed'
-import { localStorage } from 'nextbone/localStorage'
-import { getContactsSample } from "./sample-data";
-
+import { computed } from 'nextbone/computed';
 
 export 
 @computed({
@@ -17,8 +14,7 @@ class Contact extends Model {
   };
 }
 
-export 
-@localStorage('Contacts', {initialData: getContactsSample})
+export
 class Contacts extends Collection {
   static model = Contact;
 }
