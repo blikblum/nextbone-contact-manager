@@ -4,7 +4,7 @@ function getId(){
   return ++id;
 }
 
-export function getContacts() {
+export function getContactsSample() {
   return [
     {
       id:getId(),

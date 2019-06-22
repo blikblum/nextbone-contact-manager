@@ -1,5 +1,4 @@
 import {Route, elProperty} from "nextbone-routing";
-import {Contacts} from 'entities';
 import ContactsView from './contacts-view';
 
 export default class extends Route {  
@@ -14,7 +13,11 @@ export default class extends Route {
 
   activate() {
     if (!this.contacts) {
-      this.contacts = new Contacts()
+      const getContacts = this.$options.getContacts
+      if (!getContacts) {
+        throw new Error(`Contacts route: getContacts callback not defined`)
+      }
+      this.contacts = getContacts()
       return this.contacts.fetch() 
     }
   }
