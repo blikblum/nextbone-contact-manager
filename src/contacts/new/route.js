@@ -1,14 +1,13 @@
 import {Route, elEvent} from 'nextbone-routing';
 import _ from 'underscore';
 import ContactEditView from '../edit/contact-edit-view';
-import { modals } from 'modals';
 
 export default class extends Route {
   static component = ContactEditView;
 
   deactivate(transition) {
     if (!this.contactSaved) {
-      return modals.confirm({
+      return this.context.modals.confirm({
         title: 'Contact has unsaved changes',
         text: 'Do you want to exit anyway?'
       }).then((result) => {

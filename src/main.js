@@ -5,6 +5,7 @@ import { Contacts } from 'entities';
 import { registerContactsRoute } from './contacts/register';
 import { bindLocalStorage } from 'nextbone/localStorage'
 import { getContactsSample } from "sample-data";
+import { modals } from './common/modals';
 
 
 const router = new Router({outlet: '#app', log: true, logError: true});
@@ -17,7 +18,7 @@ const getContacts = () => {
 
 router.map(function (route) {
   route('application', {path: '/', class: ApplicationRoute}, function () {
-    registerContactsRoute(route, getContacts)
+    registerContactsRoute(route, getContacts, modals)
   })
 });
 

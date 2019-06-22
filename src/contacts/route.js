@@ -5,11 +5,16 @@ export default class extends Route {
   static component = ContactsView;
 
   static providedContexts = {
-    contacts: {property: 'contacts'}
+    contacts: {property: 'contacts'},
+    modals: {property: 'modals'}
   }
 
   @elProperty
   contacts
+
+  get modals() {
+    return this.$options.modals
+  }
 
   activate() {
     if (!this.contacts) {
