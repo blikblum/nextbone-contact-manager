@@ -12,12 +12,6 @@ class ContactsView extends Component {
 
   render() {
     return html`
-      <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top" role="navigation">
-          <a class="navbar-brand" href="#">
-              Contacts
-          </a>          
-      </nav>
-
       <div class="container">
           <div class="row mb-2">
             <div class="col-md-4" routerlinks>
