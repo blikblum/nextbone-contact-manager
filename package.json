@@ -1,6 +1,6 @@
 {
   "name": "nextbone-contact-manager",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A Nextbone contact manager example",
   "main": "src/export.js",
   "dependencies": {
