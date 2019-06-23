@@ -1,7 +1,7 @@
 import { Component, html, customElement, classMap } from "component";
 import {event, state} from 'nextbone'
 import {formBind} from 'nextbone/formbind'
-import { Contact } from 'entities'
+import { Contact } from '../../common/entities'
 
 @customElement('contact-edit-view')
 @formBind
