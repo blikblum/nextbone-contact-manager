@@ -5,13 +5,15 @@ import ContactEditView from '../edit/contact-edit-view';
 export default class extends Route {
   static component = ContactEditView;
 
-  deactivate(transition) {
+  activate() {
+    this.contactSaved = false
+  }
+
+  deactivate() {
     if (!this.contactSaved) {
       return this.context.modals.confirm({
         title: 'Contact has unsaved changes',
         text: 'Do you want to exit anyway?'
-      }).then((result) => {
-        if (!result) transition.cancel()
       })
     }    
   }  

@@ -1,9 +1,9 @@
 import { Component, html, customElement } from "component";
-import {routerLinks} from 'nextbone-routing'
-import {state} from 'nextbone'
+import { withRouterLinks } from 'nextbone-routing'
+import { state } from 'nextbone'
 
 @customElement('contacts-view')
-@routerLinks
+@withRouterLinks
 class ContactsView extends Component {
   static outlet = '.contact-outlet'
 

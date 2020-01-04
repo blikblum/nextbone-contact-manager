@@ -16,13 +16,11 @@ export default class extends Route {
     }
   }
 
-  deactivate(transition) {
+  deactivate() {
     if (!this.el.model.id || !_.isEqual(this.contact.attributes, this.el.model.attributes)) {
       return this.context.modals.confirm({
         title: 'Contact has unsaved changes',
         text: 'Do you want to exit anyway?'
-      }).then((result) => {
-        if (!result) transition.cancel()
       })
     }
   }
